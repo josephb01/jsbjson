@@ -15,25 +15,44 @@ JsonObjectEndWithName( 1, subMember );
 
 JsonObjectBegin( Member2 );
     JsonAddMember( desc2, std::string );
-    AddJsonMember( subMember, Member3 );
+    JsonAddObjectMember( subMember, Member3 );
 JsonObjectEndWithName( 2, complexMember3 );
+
+JsonObjectBegin( ArrayElement );
+    JsonAddMember( userName, std::string );
+    JsonAddMember( userPassword, std::string );
+    JsonAddMember( daysLogin, std::vector<std::string> );
+JsonObjectEndWithName( 3, userInfo );
 
 JsonObjectBegin( Complex );
     JsonAddMember( description, std::string );
-    AddJsonMember( complexMember1, Member1 );
-    AddJsonMember( complexMember2, Member2 );
-JsonObjectEndWithName( 3, complex );
+    JsonAddObjectMember( complexMember1, Member1 );
+    JsonAddObjectMember( complexMember2, Member2 );
+    JsonAddMember( values, std::vector<int> );
+    JsonAddMember( users, std::vector<ArrayElement> );
+JsonObjectEndWithName( 5, complex );
 
 int main()
 {
-    struct S : public JsonMemberBase {};
     Complex p;
     p.description                     = "This is a description";
     p.complexMember1.korte            = 23;
     p.complexMember2.desc2            = "Description2";
     p.complexMember2.subMember.valami = 12;
+    p.values                          = { 1, 2, 3, 4 };
+    ArrayElement user;
+    user.userName     = "John";
+    user.userPassword = "asdf";
+    user.daysLogin    = { "Monday, Friday" };
+    std::vector<ArrayElement> users;
+    users.push_back( user );
+    user.userName     = "David";
+    user.userPassword = "pwd123";
+    user.daysLogin    = { "Sunday" };
+    users.push_back( user );
+    p.users = users;
 
-    std::cout << ToJson<Complex> {}( p, true ) << std::endl;
+    std::cout << jsbjson::ToJson<Complex> {}( p, true ) << std::endl;
 
     JsonDocument lDocument;
     // lDocument.Parse( "{\"string1\":\"value1\",\"string2\":\"value2\",\"object\":{\"string3\":\"value3\"}}" );

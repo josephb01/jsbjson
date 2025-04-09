@@ -27,7 +27,7 @@ struct JsonMemberBase {};
 #define JsonObjectBegin( aName ) struct aName:public JsonObjectBase {
 #define JsonAddMember( aName, aType ) \
         CreateMember( aName, aType, UNIQUE_NAME( aName ) )
-#define AddJsonMember( aName, aType ) aType aName;
+#define JsonAddObjectMember( aName, aType ) aType aName;
 #define JsonObjectEnd( aMemberCount ) \
         constexpr size_t MemberCount() const { return aMemberCount; } \
         static constexpr bool HasName() { return false; } \
