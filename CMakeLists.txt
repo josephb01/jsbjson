@@ -12,7 +12,7 @@ add_executable(jsbjson)
 
 # Add source files
 file(GLOB_RECURSE SOURCES "src/*.cpp")
-target_sources(json PRIVATE ${SOURCES})
+target_sources(jsbjson PRIVATE ${SOURCES})
 
 # Include directories
 target_include_directories(jsbjson PRIVATE "src")
