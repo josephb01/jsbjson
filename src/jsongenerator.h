@@ -111,6 +111,17 @@ namespace jsbjson
         }
     };
 
+    template<class T, class = void>
+    struct HasMember : std::false_type {};
+
+    template<class T>
+    struct HasMember<T, std::void_t<decltype( T::JsonMember )>>: std::true_type {};
+
+    template<class T, class = void>
+    struct HasObject : std::false_type {};
+
+    template<class T>
+    struct HasObject<T, std::void_t<decltype( T::JsonObject )>>: std::true_type {};
 
     template<typename T>
     class ToJson
@@ -119,8 +130,8 @@ namespace jsbjson
 
         static constexpr bool IsComplexType()
         {
-            return std::is_base_of_v<JsonMemberBase, Decayed_T>
-                   || std::is_base_of_v<JsonObjectBase, Decayed_T>
+            return HasMember<Decayed_T>::value
+                   || HasObject<Decayed_T>::value
                    || IsVector<Decayed_T>::value;
         }
 
@@ -140,7 +151,7 @@ namespace jsbjson
         {
             std::string lResult;
 
-            if constexpr ( std::is_base_of_v<JsonObjectBase, Decayed_T>) {
+            if constexpr ( HasObject<Decayed_T>::value ) {
                 if ( aIsRoot ) {
                     lResult += "{";
                 }
@@ -168,7 +179,7 @@ namespace jsbjson
                 return lResult;
             }
 
-            if constexpr ( std::is_base_of_v<JsonMemberBase, Decayed_T>) {
+            if constexpr ( HasMember<Decayed_T>::value ) {
                 lResult += "\"";
                 lResult += std::string { aObject.Name } + "\":";
                 lResult += ToJson<decltype( aObject.Value )> {}( aObject.Value, false );

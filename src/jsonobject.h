@@ -6,6 +6,22 @@ struct JsonObjectBase {};
 
 struct JsonMemberBase {};
 
+template<class S, std::size_t... Is, class Tup>
+S to_struct( std::index_sequence<Is...>,
+             Tup&& tup )
+{
+    using std::get;
+    return { get<Is>( std::forward<Tup>( tup ) ) ... };
+}
+
+template<class S, class Tup>
+S to_struct( Tup&& tup )
+{
+    using T = std::remove_reference_t<Tup>;
+
+    return to_struct<S>( std::make_index_sequence<std::tuple_size<T> {}> {}, std::forward<Tup>( tup ) );
+}
+
 #define STRING( a ) STR( a )
 #define STR( a )    #a
 
@@ -16,15 +32,48 @@ struct JsonMemberBase {};
 
 #define CreateMember( aName, aType, aStructName ) \
         template<typename T> \
-        struct aStructName : public JsonMemberBase { \
+        struct aStructName \
+        { \
             static constexpr std::string_view Name = STRING( aName ); \
             T                                 Value; \
-            const T& operator ()() const { return Value; } \
-            auto& operator =( const T& aValue ) { Value = aValue; return Value; } \
+            aStructName( const T& aVal ) \
+                : Value( aVal ) \
+            {} \
+            aStructName( const aStructName& aOther ) = default; \
+            aStructName()                            = default; \
+            const T& operator ()() const \
+            { \
+                return Value; \
+            } \
+            auto& operator =( const T& aValue ) \
+            { \
+                Value = aValue; \
+                return Value; \
+            } \
+            T& operator ->() { return Value; } \
+        private: \
+            static constexpr bool JsonMember() { return true; } \
         }; \
-        aStructName<aType> aName;
+        aStructName<aType> aName; \
+        using aName ## _t = aStructName<aType>
 
-#define JsonObjectBegin( aName ) struct aName:public JsonObjectBase {
+#define JsonObjectBegin( aName ) \
+        struct aName { \
+            template<typename...ARGS> \
+            static aName Create( const ARGS & ... aArgs ) \
+            { \
+                using TupleType = std::tuple<ARGS...>; \
+                TupleType Tuple = std::make_tuple( aArgs... ); \
+                return to_struct<aName, TupleType>( std::move( Tuple ) ); \
+            } \
+        private: \
+            static constexpr bool JsonObject() { return true; } \
+        public:
+#define JsonObjectBeginRoot( aName ) \
+        JsonObjectBegin( aName ) \
+            std::string ToJson() const { \
+                return jsbjson::ToJson<aName> {}( *this, true ); \
+            }
 #define JsonAddMember( aName, aType ) \
         CreateMember( aName, aType, UNIQUE_NAME( aName ) )
 #define JsonAddObjectMember( aName, aType ) aType aName;
@@ -32,12 +81,11 @@ struct JsonMemberBase {};
         constexpr size_t MemberCount() const { return aMemberCount; } \
         static constexpr bool HasName() { return false; } \
         auto Convert() const { return ToTuple<aMemberCount> {}( *this ); } \
-        }; \
+        };
 
 #define JsonObjectEndWithName( aMemberCount, aName ) \
         constexpr size_t MemberCount() const { return aMemberCount; } \
         static constexpr bool HasName() { return true; } \
         constexpr std::string_view Name() const { return STRING( aName ); } \
         auto Convert() const { return ToTuple<aMemberCount> {}( *this ); } \
-        }; \
-
+        };
