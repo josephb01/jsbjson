@@ -1,4 +1,4 @@
-#include <string_view>
+﻿#include <string_view>
 #include <typeinfo>
 #include <iostream>
 #include "jsonobject.h"
@@ -42,14 +42,29 @@ int main()
     p.values                          = { 1, 2, 3, 4 };
     p.users                           = { ArrayElement::Create( ArrayElement::userName_t( "John" ), ArrayElement::userPassword_t( "pwd1" ), ArrayElement::daysLogin_t( { std::string { "Monday" }, std::string { "Tuesday" }
                                                                                                                                                                        } ) ) };
-
+    p.users.Value.push_back( ArrayElement::Create( ArrayElement::userName_t( "Peter" ), ArrayElement::userPassword_t( "pwd123" ), ArrayElement::daysLogin_t( { std::string { "Tuesday" }, std::string { "Friday" }
+                                                                                                                                                             } ) ) );
     // std::cout << jsbjson::ToJson<Complex> {}( p, true ) << std::endl;
     std::cout << p.ToJson() << std::endl;
     JsonDocument lDocument;
 
 // lDocument.Parse( "{\"string1\":\"value1\",\"string2\":\"value2\",\"object\":{\"string3\":\"value3\"}}" );
 // lDocument.Parse( "{\"object\":{\"string3\":\"value3\", \"xxx\":\"kurva\"}, \"objec2\":{\"string6\":\"value7\"}}" );
-    lDocument.Parse( "{\"object\":{\"string3\":\"value3\"}, \"faszom\":\"geci\"}" );
+// lDocument.Parse( "{\"object\":{\"string3\":\"value3\"}, \"faszom\":\"geci\"}" );
+
+    // lDocument.Parse( "{\"array\":[\"alma\",\"korte\"]}" );
+    lDocument.Parse( "{\"array\":[{\"type\":\"fruit\", \"value\":\"3\"},\"korte\"]}" );
+    // const std::optional<JsonObject::ArrayType>& lArray  = lDocument.Root.GetAsArray<JsonObject::ArrayType>( "array" );
+    const std::optional<JsonObject> lOjbect = lDocument.Root.Get<JsonObject>( "array" );
+
+    // const std::optional<JsonObject> lString = lDocument.Root.Get<JsonObject>( "object" );
+
+// const auto& l       = std::get<JsonObject::DictType>( lDocument.Root.Value )[ "faszom" ];
+// const auto& lObject = std::get<JsonObject::ObjectType>( l );
+// const auto& lValue  = std::get<std::string>( lObject );
+
+    // const JsonObject::ValueType& lValue      = lDict[ "faszom" ];
+
 // lDocument.Parse( "{\"string3\":\"value3\"}" );
 
     if ( true ) {

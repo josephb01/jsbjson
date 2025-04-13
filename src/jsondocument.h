@@ -3,14 +3,101 @@
 #include <string>
 #include <map>
 #include <vector>
+#include <optional>
 #include <list>
 
 struct JsonObject
 {
-    using ObjectType = std::variant<int64_t, bool, std::string, double, JsonObject, std::vector<JsonObject>>;
-    using DictType   = std::map<std::string, ObjectType>;
+    using ObjectType = std::variant<int64_t, bool, std::string, double, JsonObject>;
+    using ArrayType  = std::vector<ObjectType>;
+    using ValueType  = std::variant<ObjectType, ArrayType>;
+    using DictType   = std::map<std::string, ValueType>;
 
-    DictType Value;
+    struct Empty {};
+
+    bool IsArray() const
+    {
+        return std::holds_alternative<ArrayType>( Value );
+    }
+
+    template<typename T>
+    const std::optional<T> GetAsArray( const std::string& aKey )
+    {
+        using Decayed_t = std::decay_t<T>;
+
+        if constexpr ( !std::is_same_v<Decayed_t, ArrayType>) {
+            return std::nullopt;
+        }
+        else {
+            DictType& lDict = std::get<DictType>( Value );
+
+            if ( lDict.count( aKey ) == 0 ) {
+                return std::nullopt;
+            }
+
+            const ValueType& lValue = lDict[ aKey ];
+
+            if ( std::holds_alternative<ObjectType>( lValue ) ) {
+                const ObjectType& lObjectTypeVariant = std::get<ObjectType>( lValue );
+
+                if ( !std::holds_alternative<JsonObject>( lObjectTypeVariant ) ) {
+                    return std::nullopt;
+                }
+
+                const JsonObject& lJsonObject = std::get<JsonObject>( lObjectTypeVariant );
+
+                if ( !lJsonObject.IsArray() ) {
+                    return std::nullopt;
+                }
+
+                return std::get<ArrayType>( lJsonObject.Value );
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    template<typename T>
+    std::optional<T> Get( const std::string& aKey )
+    {
+        using Decayed_t = std::decay_t<T>;
+
+        if constexpr ( std::is_same_v<Decayed_t, ArrayType>) {
+            return std::nullopt;
+        }
+        else {
+            DictType& lDict = std::get<DictType>( Value );
+
+            if ( lDict.count( aKey ) == 0 ) {
+                return std::nullopt;
+            }
+
+            const ValueType& lValue = lDict[ aKey ];
+
+            if ( std::holds_alternative<ObjectType>( lValue ) ) {
+                const ObjectType& lObjectTypeVariant = std::get<ObjectType>( lValue );
+
+                if ( !std::holds_alternative<Decayed_t>( lObjectTypeVariant ) ) {
+                    return std::nullopt;
+                }
+
+                return std::get<Decayed_t>( lObjectTypeVariant );
+            }
+        }
+
+        return std::nullopt;
+    }
+
+    size_t Size() const
+    {
+        if ( IsArray() ) {
+            return std::get<ArrayType>( Value ).size();
+        }
+
+        return std::get<DictType>( Value ).size();
+    }
+
+    std::variant<Empty, ArrayType, DictType> Value = DictType {};
 };
 
 struct JsonDocument
@@ -20,6 +107,8 @@ private:
     {
         Init
         , InObject
+        , InArrayObject
+        , InArrayObjectFinish
         , InObjectName
         , InObjectValueDelimiter
         , InObjectValueParseBegin
@@ -41,15 +130,18 @@ private:
 private:
     struct ParsedElement
     {
-        using ObjectType = JsonObject::ObjectType;
+        using ValueType = JsonObject::ObjectType;
         std::string Name;
-        ObjectType  Value;
+        ValueType   Value;
     };
 
     ParsedElement          ParsedElement;
     std::list<JsonObject*> Parents;
-    size_t                 OpeningCount = 0;
-    JsonObject             Root;
+    size_t                 OpeningCount        = 0;
+    size_t                 OpeningBracketCount = 0;
+
+public:
+    JsonObject Root;
 
 private:
     bool ParseInit( const char aChar )
@@ -72,6 +164,24 @@ private:
     {
         if ( std::isspace( aChar ) ) {
             return true;
+        }
+
+        if ( aChar == '{' ) {
+            if ( !Parents.back()->IsArray() ) {
+                return false;
+            }
+
+            OpeningCount++;
+            JsonObject::ArrayType& lArray = std::get<JsonObject::ArrayType>( Parents.back()->Value );
+            lArray.push_back( JsonObject {} );
+            JsonObject& lObject = std::get<JsonObject>( lArray.back() );
+            Parents.push_back( &lObject );
+            State = ParseState::InArrayObject;
+            return true;
+        }
+
+        if ( Parents.back()->IsArray() ) {
+            return ParseValueBegin( aChar );
         }
 
         if ( aChar == '\"' ) {
@@ -134,21 +244,45 @@ private:
         }
 
         if ( aChar == '[' ) {
-            State = ParseState::InObjectValueParseArray;
+            State = ParseState::InObject;
+
+            if ( !Parents.back()->IsArray() ) {
+                std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = JsonObject {};
+                auto&       lValue                                                            = std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ];
+                auto&       lVariant                                                          = std::get<JsonObject::ObjectType>( lValue );
+                JsonObject& lObject                                                           = std::get<JsonObject>( lVariant );
+                lObject.Value                                                                 = JsonObject::ArrayType {};
+                Parents.push_back( &lObject );
+                return true;
+            }
+
+            JsonObject::ArrayType& lArray = std::get<JsonObject::ArrayType>( Parents.back()->Value );
+            lArray.push_back( JsonObject {} );
+            JsonObject& lObject = std::get<JsonObject>( lArray.back() );
+            Parents.push_back( &lObject );
+
             return true;
         }
 
         if ( aChar == '{' ) {
-            if ( ParsedElement.Name.empty() ) {
-                return false;
+            if ( !Parents.back()->IsArray() ) {
+                if ( ParsedElement.Name.empty() ) {
+                    return false;
+                }
             }
 
             OpeningCount++;
             State = ParseState::InObject;
 
-            Parents.back()->Value[ ParsedElement.Name ] = JsonObject {};
-            JsonObject* lNewItem                        = &std::get<JsonObject>( Parents.back()->Value[ ParsedElement.Name ] );
-            Parents.push_back( lNewItem );
+            if ( Parents.back()->IsArray() ) {
+                return true;
+            }
+
+            std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = JsonObject {};
+            auto&       lValue                                                            = std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ];
+            auto&       lVariant                                                          = std::get<JsonObject::ObjectType>( lValue );
+            JsonObject& lObject                                                           = std::get<JsonObject>( lVariant );
+            Parents.push_back( &lObject );
             return true;
         }
 
@@ -158,8 +292,15 @@ private:
     bool ParseValueString( const char aChar )
     {
         if ( aChar == '\"' ) {
-            Parents.back()->Value[ ParsedElement.Name ] = ParsedElement.Value;
-            State                                       = ParseState::InObjectValueParseFinish;
+            State = ParseState::InObjectValueParseFinish;
+
+            if ( Parents.back()->IsArray() ) {
+                State = ParseState::InArrayObjectFinish;
+                std::get<JsonObject::ArrayType>( Parents.back()->Value ).push_back( ParsedElement.Value );
+                return true;
+            }
+
+            std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = ParsedElement.Value;
             return true;
         }
 
@@ -217,9 +358,52 @@ private:
         return false;
     }
 
+    bool ParseInArrayObject( const char aChar )
+    {
+        if ( std::isspace( aChar ) ) {
+            return true;
+        }
+
+        if ( aChar == '}' ) {
+            State = ParseState::InArrayObjectFinish;
+            return true;
+        }
+
+        if ( aChar == '\"' ) {
+            State              = ParseState::InObjectName;
+            ParsedElement.Name = "";
+            return true;
+        }
+
+        return false;
+    }
+
+    bool ParseInArrayObjectFinish( const char aChar )
+    {
+        if ( std::isspace( aChar ) ) {
+            return true;
+        }
+
+        if ( aChar == ',' ) {
+            State = ParseState::InObject;
+            return true;
+        }
+
+        if ( aChar == ']' ) {
+            Parents.pop_back();
+            State = ParseState::InObjectFinish;
+            return true;
+        }
+
+        return false;
+    }
+
 public:
     bool Parse( const std::string& aDocument )
     {
+        Parents.clear();
+        Root = {};
+
         for ( const auto lChar : aDocument ) {
             bool lParseResult = [ this ] ( const char bChar )->bool
                                 {
@@ -253,6 +437,14 @@ public:
 
                                     if ( State == ParseState::InObjectFinish ) {
                                         return PareseObjectFinish( bChar );
+                                    }
+
+                                    if ( State == ParseState::InArrayObject ) {
+                                        return ParseInArrayObject( bChar );
+                                    }
+
+                                    if ( State == ParseState::InArrayObjectFinish ) {
+                                        return ParseInArrayObjectFinish( bChar );
                                     }
 
                                     return false;
