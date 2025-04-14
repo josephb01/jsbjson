@@ -5,20 +5,24 @@
 #include <tuple>
 #include <string>
 #include <vector>
+#include <list>
 #include "bindings.h"
 #include "jsonobject.h"
 
-template<typename>
-struct IsVector : std::false_type {};
-
-template<typename T, typename...A>
-struct IsVector<std::vector<T, A...>>: std::true_type {};
-
-template<typename T>
-struct ToSimpleValue {};
-
 namespace jsbjson
 {
+    template<typename>
+    struct IsArray : std::false_type {};
+
+    template<typename T, typename...A>
+    struct IsArray<std::vector<T, A...>>: std::true_type {};
+
+    template<typename T, typename...A>
+    struct IsArray<std::list<T, A...>>: std::true_type {};
+
+    template<typename T>
+    struct ToSimpleValue {};
+
     template<>
     struct ToSimpleValue<int8_t>
     {
@@ -112,16 +116,16 @@ namespace jsbjson
     };
 
     template<class T, class = void>
-    struct HasMember : std::false_type {};
+    struct IsMember : std::false_type {};
 
     template<class T>
-    struct HasMember<T, std::void_t<decltype( T::JsonMember )>>: std::true_type {};
+    struct IsMember<T, std::void_t<decltype( T::IsAJsonMember )>>: std::true_type {};
 
     template<class T, class = void>
-    struct HasObject : std::false_type {};
+    struct IsObject : std::false_type {};
 
     template<class T>
-    struct HasObject<T, std::void_t<decltype( T::JsonObject )>>: std::true_type {};
+    struct IsObject<T, std::void_t<decltype( T::IsAJsonObject )>>: std::true_type {};
 
     template<typename T>
     class ToJson
@@ -130,9 +134,9 @@ namespace jsbjson
 
         static constexpr bool IsComplexType()
         {
-            return HasMember<Decayed_T>::value
-                   || HasObject<Decayed_T>::value
-                   || IsVector<Decayed_T>::value;
+            return IsMember<Decayed_T>::value
+                   || IsObject<Decayed_T>::value
+                   || IsArray<Decayed_T>::value;
         }
 
         static std::string AppendComma( const size_t aItemCount,
@@ -147,17 +151,21 @@ namespace jsbjson
 
     public:
         std::string operator ()( const T&   aObject,
-                                 const bool aIsRoot = true ) const
+                                 const bool aIsRoot  = true,
+                                 const bool aInArray = false ) const
         {
             std::string lResult;
 
-            if constexpr ( HasObject<Decayed_T>::value ) {
-                if ( aIsRoot ) {
-                    lResult += "{";
-                }
+            if ( aIsRoot ) {
+                lResult += "{";
+            }
 
-                if constexpr ( aObject.HasName() ) {
-                    lResult += "\"" + std::string { aObject.Name() } + "\":";
+            if constexpr ( IsObject<Decayed_T>::value ) {
+                if ( !aIsRoot ) {
+                    if ( !aInArray ) {
+                        lResult += "\"" + std::string { aObject.Name() } + "\":";
+                    }
+
                     lResult += "{";
                 }
 
@@ -168,30 +176,24 @@ namespace jsbjson
                                 ( ( lResult += ToJson<decltype( aMembers )> {}( aMembers, false ) + AppendComma( lMemberCount, ++lIndex ) ), ... );
                             }, aObject.Convert() );
 
-                if constexpr ( aObject.HasName() ) {
-                    lResult += "}";
-                }
-
-                if ( aIsRoot ) {
-                    lResult += "}";
-                }
+                lResult += "}";
 
                 return lResult;
             }
 
-            if constexpr ( HasMember<Decayed_T>::value ) {
+            if constexpr ( IsMember<Decayed_T>::value ) {
                 lResult += "\"";
                 lResult += std::string { aObject.Name } + "\":";
                 lResult += ToJson<decltype( aObject.Value )> {}( aObject.Value, false );
                 return lResult;
             }
 
-            if constexpr ( IsVector<Decayed_T>::value ) {
+            if constexpr ( IsArray<Decayed_T>::value ) {
                 lResult      += "[";
                 size_t lIndex = 0;
 
                 for ( const auto& lItem : aObject ) {
-                    lResult += ToJson<decltype( lItem )> {}( lItem, true );
+                    lResult += ToJson<decltype( lItem )> {}( lItem, false, true );
 
                     if ( ++lIndex != aObject.size() ) {
                         lResult += ",";

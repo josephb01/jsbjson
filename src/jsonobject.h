@@ -2,10 +2,6 @@
 #include <string_view>
 #include "bindings.h"
 
-struct JsonObjectBase {};
-
-struct JsonMemberBase {};
-
 template<class S, std::size_t... Is, class Tup>
 S to_struct( std::index_sequence<Is...>,
              Tup&& tup )
@@ -52,7 +48,7 @@ S to_struct( Tup&& tup )
             } \
             T& operator ->() { return Value; } \
         private: \
-            static constexpr bool JsonMember() { return true; } \
+            static constexpr bool IsAJsonMember() { return true; } \
         }; \
         aStructName<aType> aName; \
         using aName ## _t = aStructName<aType>
@@ -66,8 +62,9 @@ S to_struct( Tup&& tup )
                 TupleType Tuple = std::make_tuple( aArgs... ); \
                 return to_struct<aName, TupleType>( std::move( Tuple ) ); \
             } \
+            constexpr std::string_view Name() const { return STRING( aName ); } \
         private: \
-            static constexpr bool JsonObject() { return true; } \
+            static constexpr bool IsAJsonObject() { return true; } \
         public:
 #define JsonObjectBeginRoot( aName ) \
         JsonObjectBegin( aName ) \
@@ -76,16 +73,8 @@ S to_struct( Tup&& tup )
             }
 #define JsonAddMember( aName, aType ) \
         CreateMember( aName, aType, UNIQUE_NAME( aName ) )
-#define JsonAddObjectMember( aName, aType ) aType aName;
+#define JsonAddObjectMember( aType ) aType aType;
 #define JsonObjectEnd( aMemberCount ) \
         constexpr size_t MemberCount() const { return aMemberCount; } \
-        static constexpr bool HasName() { return false; } \
-        auto Convert() const { return ToTuple<aMemberCount> {}( *this ); } \
-        };
-
-#define JsonObjectEndWithName( aMemberCount, aName ) \
-        constexpr size_t MemberCount() const { return aMemberCount; } \
-        static constexpr bool HasName() { return true; } \
-        constexpr std::string_view Name() const { return STRING( aName ); } \
         auto Convert() const { return ToTuple<aMemberCount> {}( *this ); } \
         };
