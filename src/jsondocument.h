@@ -245,6 +245,7 @@ private:
 
         if ( aChar == '[' ) {
             State = ParseState::InObject;
+            OpeningBracketCount++;
 
             if ( !Parents.back()->IsArray() ) {
                 std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = JsonObject {};
@@ -331,6 +332,14 @@ private:
             return true;
         }
 
+        if ( aChar == ']' ) {
+            if ( OpeningBracketCount == 0 ) {
+                return false;
+            }
+
+            OpeningBracketCount--;
+        }
+
         return false;
     }
 
@@ -390,6 +399,11 @@ private:
         }
 
         if ( aChar == ']' ) {
+            if ( OpeningBracketCount == 0 ) {
+                return false;
+            }
+
+            OpeningBracketCount--;
             Parents.pop_back();
             State = ParseState::InObjectFinish;
             return true;

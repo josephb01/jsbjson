@@ -30,6 +30,7 @@ S to_struct( Tup&& tup )
         template<typename T> \
         struct aStructName \
         { \
+            using Type                             = T; \
             static constexpr std::string_view Name = STRING( aName ); \
             T                                 Value; \
             aStructName( const T& aVal ) \
@@ -77,4 +78,5 @@ S to_struct( Tup&& tup )
 #define JsonObjectEnd( aMemberCount ) \
         constexpr size_t MemberCount() const { return aMemberCount; } \
         auto Convert() const { return ToTuple<aMemberCount> {}( *this ); } \
+        auto ConvertRef() { return ToRefTuple<aMemberCount> {}( *this ); } \
         };

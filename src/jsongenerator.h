@@ -6,8 +6,10 @@
 #include <string>
 #include <vector>
 #include <list>
+#include <optional>
 #include "bindings.h"
 #include "jsonobject.h"
+#include "jsondocument.h"
 
 namespace jsbjson
 {
@@ -207,6 +209,69 @@ namespace jsbjson
             if constexpr ( !IsComplexType() ) {
                 return ToSimpleValue<Decayed_T> {}( aObject );
             }
+        }
+    };
+
+    template<typename OBJECT>
+    class FromJson final
+    {
+    private:
+        template<typename OBJECT>
+        void ProcessObject( OBJECT&&    aObject,
+                            JsonObject& aJsonObject )
+        {
+            auto                      lValuesAsTuple = aObject.ConvertRef();
+            std::optional<JsonObject> lJsonObject    = aJsonObject.Get<JsonObject>( std::string { aObject.Name() } );
+
+            if ( !lJsonObject.has_value() ) {
+                return;
+            }
+
+            std::apply( [ & ] (auto&... aArgs)
+                        {
+                            ( Process<decltype( aArgs )>( std::forward<decltype( aArgs )>( aArgs ), lJsonObject.value() ), ... );
+                        }, lValuesAsTuple );
+        }
+
+        template<typename MEMBER>
+        void Process( MEMBER&&    aMember,
+                      JsonObject& aJsonObject )
+        {
+            if constexpr ( IsObject<std::decay_t<MEMBER>>::value ) {
+                ProcessObject( std::forward<MEMBER>( aMember ), aJsonObject );
+            }
+
+            if constexpr ( IsMember<std::decay_t<MEMBER>>::value ) {
+                using MemberT                 = std::decay_t<MEMBER>::Type;
+                std::optional<MemberT> lValue = aJsonObject.Get<MemberT>( std::string { aMember.Name } );
+
+                if ( lValue.has_value() ) {
+                    aMember.Value = lValue.value();
+                }
+            }
+        }
+
+    public:
+        std::optional<std::decay_t<OBJECT>> operator ()( const std::string& aJsonDocument )
+        {
+            if constexpr ( !IsObject<OBJECT>::value ) {
+                return std::nullopt;
+            }
+
+            JsonDocument lDocument;
+
+            if ( !lDocument.Parse( aJsonDocument ) ) {
+                return std::nullopt;
+            }
+
+            OBJECT lObject;
+            auto   lValuesAsTuple = lObject.ConvertRef();
+            std::apply( [ & ] (auto&... aArgs)
+                        {
+                            ( Process<decltype( aArgs )>( std::forward<decltype( aArgs )>( aArgs ), lDocument.Root ), ... );
+                        }, lValuesAsTuple );
+
+            return lObject;
         }
     };
 }
