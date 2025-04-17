@@ -2,20 +2,23 @@
 #include <string_view>
 #include "bindings.h"
 
-template<class S, std::size_t... Is, class Tup>
-S to_struct( std::index_sequence<Is...>,
-             Tup&& tup )
+namespace jsbjson
 {
-    using std::get;
-    return { get<Is>( std::forward<Tup>( tup ) ) ... };
-}
+    template<class S, std::size_t... Is, class Tup>
+    S to_struct( std::index_sequence<Is...>,
+                 Tup&& tup )
+    {
+        using std::get;
+        return { get<Is>( std::forward<Tup>( tup ) ) ... };
+    }
 
-template<class S, class Tup>
-S to_struct( Tup&& tup )
-{
-    using T = std::remove_reference_t<Tup>;
+    template<class S, class Tup>
+    S to_struct( Tup&& tup )
+    {
+        using T = std::remove_reference_t<Tup>;
 
-    return to_struct<S>( std::make_index_sequence<std::tuple_size<T> {}> {}, std::forward<Tup>( tup ) );
+        return to_struct<S>( std::make_index_sequence<std::tuple_size<T> {}> {}, std::forward<Tup>( tup ) );
+    }
 }
 
 #define STRING( a ) STR( a )
@@ -61,7 +64,7 @@ S to_struct( Tup&& tup )
             { \
                 using TupleType = std::tuple<ARGS...>; \
                 TupleType Tuple = std::make_tuple( aArgs... ); \
-                return to_struct<aName, TupleType>( std::move( Tuple ) ); \
+                return jsbjson::to_struct<aName, TupleType>( std::move( Tuple ) ); \
             } \
             constexpr std::string_view Name() const { return STRING( aName ); } \
         private: \

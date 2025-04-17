@@ -44,6 +44,11 @@ JsonObjectBeginRoot( simple );
     JsonAddObjectMember( person );
 JsonObjectEnd( 2 );
 
+JsonObjectBeginRoot( boolean );
+    JsonAddMember( boolVal1, bool );
+    JsonAddMember( boolVal2, bool );
+JsonObjectEnd( 2 );
+
 int main()
 {
     complex lComplex;
@@ -68,9 +73,18 @@ int main()
         std::cout << lParsed.value().ToJson() << std::endl;
     }
 
-    JsonDocument lDocument;
-    lDocument.Parse( "{\"array\":[\"alma\",\"korte\"]}" );
-    lDocument.Parse( "{\"array\":[{\"type\":\"fruit\", \"value\":\"3\"},\"korte\"]}" );
+    boolean lBool;
+    lBool.boolVal1 = true;
+    lBool.boolVal2 = false;
 
-    const std::optional<JsonObject> lOjbect = lDocument.Root.Get<JsonObject>( "array" );
+    const std::string& lBoolJson = lBool.ToJson();
+    std::cout << lBoolJson << std::endl;
+    std::optional<boolean> lBoolParsed = jsbjson::FromJson<boolean> {}( lBoolJson );
+
+    jsbjson::JsonDocument lDocument;
+    // lDocument.Parse( "{\"array\":[\"alma\",\"korte\"]}" );
+    lDocument.Parse( "{\"array\":[true,false]}" );
+    // lDocument.Parse( "{\"array\":[{\"type\":\"fruit\", \"value\":\"3\"},\"korte\"]}" );
+
+    const jsbjson::JsonObject::ArrayType lObject = lDocument.Root.Get<jsbjson::JsonObject::ArrayType>( "array" );
 }
