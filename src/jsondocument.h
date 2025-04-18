@@ -5,12 +5,13 @@
 #include <vector>
 #include <optional>
 #include <list>
+#include <charconv>
 
 namespace jsbjson
 {
     struct JsonObject
     {
-        using ObjectType = std::variant<int64_t, bool, std::string, double, JsonObject>;
+        using ObjectType = std::variant<int64_t, uint64_t, bool, std::string, double, JsonObject>;
         using ArrayType  = std::vector<ObjectType>;
         using ValueType  = std::variant<ObjectType, ArrayType>;
         using DictType   = std::map<std::string, ValueType>;
@@ -154,11 +155,6 @@ namespace jsbjson
             , InObjectValueParseArray
             , InObjectValueParseFinish
             , InObjectFinish
-            , InObjectParse
-            , InNextElement
-            , InType
-            , InArray
-            , Finished
         };
 
         ParseState State = ParseState::Init;
@@ -166,9 +162,8 @@ namespace jsbjson
     private:
         struct ParsedElement
         {
-            using ValueType = JsonObject::ObjectType;
             std::string Name;
-            ValueType   Value;
+            std::string Value;
         };
 
         ParsedElement          ParsedElement;
@@ -268,12 +263,6 @@ namespace jsbjson
                 return true;
             }
 
-            if ( std::isdigit( aChar ) ) {
-                State               = ParseState::InObjectValueParseNumber;
-                ParsedElement.Value = std::string {};
-                return true;
-            }
-
             if ( ( std::toupper( aChar ) == 'T' )
                  || ( std::toupper( aChar ) == 'F' ) )
             {
@@ -328,53 +317,88 @@ namespace jsbjson
                 return true;
             }
 
-            return false;
+            State = ParseState::InObjectValueParseNumber;
+            ParsedElement.Value.clear();
+
+            return ParseValueNumber( aChar );
+        }
+
+        template<typename T>
+        void AddValueToParent( const T& aValue )
+        {
+            State = ParseState::InObjectValueParseFinish;
+
+            if ( Parents.back()->IsArray() ) {
+                State = ParseState::InArrayObjectFinish;
+                std::get<JsonObject::ArrayType>( Parents.back()->Value ).push_back( aValue );
+                return;
+            }
+
+            std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = aValue;
         }
 
         bool ParseValueString( const char aChar )
         {
             if ( aChar == '\"' ) {
-                State = ParseState::InObjectValueParseFinish;
-
-                if ( Parents.back()->IsArray() ) {
-                    State = ParseState::InArrayObjectFinish;
-                    std::get<JsonObject::ArrayType>( Parents.back()->Value ).push_back( ParsedElement.Value );
-                    return true;
-                }
-
-                std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = ParsedElement.Value;
+                AddValueToParent( ParsedElement.Value );
                 return true;
             }
 
-            std::get<std::string>( ParsedElement.Value ) += aChar;
+            ParsedElement.Value += aChar;
+
             return true;
         }
 
-        bool ParseValueBoolean( const char aChar )
+        template<typename HEAD, typename... TAIL>
+        std::optional<std::variant<int64_t, uint64_t, double>> ToNumber( const std::string& aString )
+        {
+            if constexpr ( sizeof...( TAIL ) == 0 ) {
+                HEAD lNumber {};
+                auto [ lPtr, lErrorCode ] = std::from_chars( aString.data(), aString.data() + aString.size(), lNumber );
+
+                if ( ( lPtr == aString.data() + aString.size() )
+                     && ( lErrorCode == std::errc() ) )
+                {
+                    std::variant<int64_t, uint64_t, double> lVariant;
+                    lVariant.emplace<HEAD>( lNumber );
+                    return lVariant;
+                }
+            }
+            else {
+                HEAD lNumber {};
+                auto [ lPtr, lErrorCode ] = std::from_chars( aString.data(), aString.data() + aString.size(), lNumber );
+
+                if ( ( lPtr == aString.data() + aString.size() )
+                     && ( lErrorCode == std::errc() ) )
+                {
+                    std::variant<int64_t, uint64_t, double> lVariant;
+                    lVariant.emplace<HEAD>( lNumber );
+                    return lVariant;
+                }
+
+                return ToNumber<TAIL...>( aString );
+            }
+
+            return std::nullopt;
+        }
+
+        bool ParseValueNumber( const char aChar )
         {
             if ( std::isspace( aChar )
                  || ( aChar == ']' )
                  || ( aChar == ',' )
                  || ( aChar == '}' ) )
             {
-                if ( std::get<std::string>( ParsedElement.Value ) == "true" ) {
-                    ParsedElement.Value = true;
-                }
-                else if ( std::get<std::string>( ParsedElement.Value ) == "false" ) {
-                    ParsedElement.Value = false;
+                std::optional<std::variant<int64_t, uint64_t, double>> lResult = ToNumber<int64_t, uint64_t, double>( ParsedElement.Value );
+
+                if ( lResult.has_value() ) {
+                    std::visit( [ & ] (auto aValue)
+                                {
+                                    AddValueToParent( aValue );
+                                }, lResult.value() );
                 }
                 else {
                     return false;
-                }
-
-                State = ParseState::InObjectValueParseFinish;
-
-                if ( Parents.back()->IsArray() ) {
-                    State = ParseState::InArrayObjectFinish;
-                    std::get<JsonObject::ArrayType>( Parents.back()->Value ).push_back( ParsedElement.Value );
-                }
-                else {
-                    std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = ParsedElement.Value;
                 }
 
                 if ( State == ParseState::InArrayObjectFinish ) {
@@ -385,11 +409,47 @@ namespace jsbjson
                     return ParseValueFinish( aChar );
                 }
 
-                std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = ParsedElement.Value;
-                return true;
+                return false;
             }
 
-            std::get<std::string>( ParsedElement.Value ) += aChar;
+            ParsedElement.Value += aChar;
+
+            return true;
+        }
+
+        bool ParseValueBoolean( const char aChar )
+        {
+            if ( std::isspace( aChar )
+                 || ( aChar == ']' )
+                 || ( aChar == ',' )
+                 || ( aChar == '}' ) )
+            {
+                bool lParsedValue = false;
+
+                if ( ParsedElement.Value == "true" ) {
+                    lParsedValue = true;
+                }
+                else if ( ParsedElement.Value == "false" ) {
+                    lParsedValue = false;
+                }
+                else {
+                    return false;
+                }
+
+                AddValueToParent( lParsedValue );
+
+                if ( State == ParseState::InArrayObjectFinish ) {
+                    return ParseInArrayObjectFinish( aChar );
+                }
+
+                if ( State == ParseState::InObjectValueParseFinish ) {
+                    return ParseValueFinish( aChar );
+                }
+
+                return false;
+            }
+
+            ParsedElement.Value += aChar;
             return true;
         }
 
@@ -524,6 +584,10 @@ namespace jsbjson
 
                                         if ( State == ParseState::InObjectValueParseBool ) {
                                             return ParseValueBoolean( bChar );
+                                        }
+
+                                        if ( State == ParseState::InObjectValueParseNumber ) {
+                                            return ParseValueNumber( bChar );
                                         }
 
                                         if ( State == ParseState::InObjectValueParseFinish ) {

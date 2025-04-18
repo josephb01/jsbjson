@@ -49,9 +49,20 @@ JsonObjectBeginRoot( boolean );
     JsonAddMember( boolVal2, bool );
 JsonObjectEnd( 2 );
 
+JsonObjectBeginRoot( number )
+    JsonAddMember( number1, double );
+    JsonAddMember( number2, int64_t );
+    JsonAddMember( number3, int64_t );
+JsonObjectEnd( 3 );
+
+JsonObjectBeginRoot( array )
+    JsonAddMember( values, std::vector<std::string> );
+JsonObjectEnd( 1 );
+
 int main()
 {
-    complex lComplex;
+    std::variant<double, uint64_t> X;
+    complex                        lComplex;
     lComplex.description            = "This is a fruit";
     lComplex.fruit.type             = "Apple";
     lComplex.price.currency         = "$";
@@ -80,6 +91,23 @@ int main()
     const std::string& lBoolJson = lBool.ToJson();
     std::cout << lBoolJson << std::endl;
     std::optional<boolean> lBoolParsed = jsbjson::FromJson<boolean> {}( lBoolJson );
+
+    number lNumber;
+    lNumber.number1 = 55.5;
+    lNumber.number2 = -111;
+    lNumber.number3 = 555;
+
+    const std::string& lNumberJson = lNumber.ToJson();
+    std::cout << lNumberJson << std::endl;
+
+    std::optional<number> lParsedNumber = jsbjson::FromJson<number> {}( lNumberJson );
+
+    array lArray;
+    lArray.values                 = { std::string( "apple" ), std::string( "wall" ) };
+    const std::string& lArrayJson = lArray.ToJson();
+    std::cout << lArrayJson << std::endl;
+
+    std::optional<array> lParsedrray = jsbjson::FromJson<array> {}( lArrayJson );
 
     jsbjson::JsonDocument lDocument;
     // lDocument.Parse( "{\"array\":[\"alma\",\"korte\"]}" );

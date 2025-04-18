@@ -98,6 +98,15 @@ namespace jsbjson
     };
 
     template<>
+    struct ToSimpleValue<double>
+    {
+        std::string operator ()( const double aVal )
+        {
+            return std::to_string( aVal );
+        }
+    };
+
+    template<>
     struct ToSimpleValue<bool>
     {
         std::string operator ()( const bool aVal )
@@ -221,7 +230,7 @@ namespace jsbjson
                             JsonObject& aJsonObject )
         {
             auto                      lValuesAsTuple = aObject.ConvertRef();
-            std::optional<JsonObject> lJsonObject    = aJsonObject.Get<JsonObject>( std::string { aObject.Name() } );
+            std::optional<JsonObject> lJsonObject    = aJsonObject.GetOpt<JsonObject>( std::string { aObject.Name() } );
 
             if ( !lJsonObject.has_value() ) {
                 return;
@@ -242,11 +251,18 @@ namespace jsbjson
             }
 
             if constexpr ( IsMember<std::decay_t<MEMBER>>::value ) {
-                using MemberT                 = std::decay_t<MEMBER>::Type;
-                std::optional<MemberT> lValue = aJsonObject.Get<MemberT>( std::string { aMember.Name } );
+                using MemberT = std::decay_t<MEMBER>::Type;
 
-                if ( lValue.has_value() ) {
-                    aMember.Value = lValue.value();
+                if constexpr ( IsArray<MemberT>::value ) {
+                    std::optional<JsonObject::ArrayType> lArray = aJsonObject.GetOpt<JsonObject::ArrayType>( std::string { aMember.Name } );
+                    /*TODO*/
+                }
+                else {
+                    std::optional<MemberT> lValue = aJsonObject.GetOpt<MemberT>( std::string { aMember.Name } );
+
+                    if ( lValue.has_value() ) {
+                        aMember.Value = lValue.value();
+                    }
                 }
             }
         }
