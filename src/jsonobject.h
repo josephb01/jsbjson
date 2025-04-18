@@ -57,6 +57,35 @@ namespace jsbjson
         aStructName<aType> aName; \
         using aName ## _t = aStructName<aType>
 
+#define CreateArrayMember( aName, aType, aStructName ) \
+        template<typename T> \
+        struct aStructName \
+        { \
+            using Type                             = std::vector<T>; \
+            using ArrayType                        = T; \
+            static constexpr std::string_view Name = STRING( aName ); \
+            std::vector<T>                    Value; \
+            aStructName( const std::vector<T>& aVal ) \
+                : Value( aVal ) \
+            {} \
+            aStructName( const aStructName& aOther ) = default; \
+            aStructName()                            = default; \
+            const T& operator ()() const \
+            { \
+                return Value; \
+            } \
+            auto& operator =( const std::vector<T>& aValue ) \
+            { \
+                Value = aValue; \
+                return Value; \
+            } \
+            T& operator ->() { return Value; } \
+        private: \
+            static constexpr bool IsAJsonMember() { return true; } \
+        }; \
+        aStructName<aType> aName; \
+        using aName ## _t = aStructName<aType>
+
 #define JsonObjectBegin( aName ) \
         struct aName { \
             template<typename...ARGS> \
@@ -77,6 +106,8 @@ namespace jsbjson
             }
 #define JsonAddMember( aName, aType ) \
         CreateMember( aName, aType, UNIQUE_NAME( aName ) )
+#define JsonAddArrayMember( aName, aType ) \
+        CreateArrayMember( aName, aType, UNIQUE_NAME( aName ) )
 #define JsonAddObjectMember( aType ) aType aType;
 #define JsonObjectEnd( aMemberCount ) \
         constexpr size_t MemberCount() const { return aMemberCount; } \

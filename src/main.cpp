@@ -28,10 +28,10 @@ JsonObjectBeginRoot( complex );
     JsonAddMember( description, std::string );
     JsonAddObjectMember( fruit );
     JsonAddObjectMember( price );
-    JsonAddMember( values, std::vector<int> );
-    JsonAddMember( moreValues, std::list<int> );
-    JsonAddMember( arrayOfArrays, std::vector<std::vector<int>> );
-    JsonAddMember( arrayOfObjects, std::vector<arrayItem> );
+    JsonAddArrayMember( values, int );
+    JsonAddArrayMember( moreValues, int );
+    JsonAddArrayMember( arrayOfArrays, std::vector<int> );
+    JsonAddArrayMember( arrayOfObjects, arrayItem );
 JsonObjectEnd( 7 );
 
 JsonObjectBegin( person );
@@ -56,7 +56,7 @@ JsonObjectBeginRoot( number )
 JsonObjectEnd( 3 );
 
 JsonObjectBeginRoot( array )
-    JsonAddMember( values, std::vector<std::string> );
+    JsonAddArrayMember( values, std::string );
 JsonObjectEnd( 1 );
 
 int main()
