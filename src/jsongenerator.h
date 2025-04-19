@@ -254,7 +254,21 @@ namespace jsbjson
                 using MemberT = std::decay_t<MEMBER>::Type;
 
                 if constexpr ( IsArray<MemberT>::value ) {
+                    using ArrayT                                = std::decay_t<MEMBER>::ArrayType;
                     std::optional<JsonObject::ArrayType> lArray = aJsonObject.GetOpt<JsonObject::ArrayType>( std::string { aMember.Name } );
+
+                    if ( lArray.has_value() ) {
+                        MemberT lResult;
+
+                        for ( const auto& lItem : lArray.value() ) {
+                            if ( lItem.type() == typeid( ArrayT ) ) {
+                                lResult.push_back( std::any_cast<ArrayT>( lItem ) );
+                            }
+                        }
+
+                        aMember.Value = lResult;
+                    }
+
                     /*TODO*/
                 }
                 else {

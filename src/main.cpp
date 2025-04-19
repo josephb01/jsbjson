@@ -61,8 +61,7 @@ JsonObjectEnd( 1 );
 
 int main()
 {
-    std::variant<double, uint64_t> X;
-    complex                        lComplex;
+    complex lComplex;
     lComplex.description            = "This is a fruit";
     lComplex.fruit.type             = "Apple";
     lComplex.price.currency         = "$";
@@ -76,7 +75,12 @@ int main()
     lComplex.arrayOfObjects = {
         { std::string( "Peterke" ), std::string( "USA" ) }
     };
-    std::cout << lComplex.ToJson() << std::endl;
+
+    const std::string& lComplexJson = lComplex.ToJson();
+
+    std::cout << lComplexJson << std::endl;
+
+    std::optional<complex> lParsedComplex = jsbjson::FromJson<complex> {}( lComplexJson );
 
     std::optional<simple> lParsed = jsbjson::FromJson<simple> {}( "{\"description\":\"Simple test object\",\"person\":{\"name\":\"John\",\"location\":\"USA\"}}" );
 
@@ -110,9 +114,9 @@ int main()
     std::optional<array> lParsedrray = jsbjson::FromJson<array> {}( lArrayJson );
 
     jsbjson::JsonDocument lDocument;
-    // lDocument.Parse( "{\"array\":[\"alma\",\"korte\"]}" );
+    lDocument.Parse( "{\"array\":[\"alma\",\"korte\"]}" );
     lDocument.Parse( "{\"array\":[true,false]}" );
-    // lDocument.Parse( "{\"array\":[{\"type\":\"fruit\", \"value\":\"3\"},\"korte\"]}" );
+    lDocument.Parse( "{\"array\":[{\"type\":\"fruit\", \"value\":\"3\"},\"korte\"]}" );
 
     const jsbjson::JsonObject::ArrayType lObject = lDocument.Root.Get<jsbjson::JsonObject::ArrayType>( "array" );
 }

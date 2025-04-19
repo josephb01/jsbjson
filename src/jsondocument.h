@@ -6,15 +6,15 @@
 #include <optional>
 #include <list>
 #include <charconv>
+#include <any>
 
 namespace jsbjson
 {
     struct JsonObject
     {
-        using ObjectType = std::variant<int64_t, uint64_t, bool, std::string, double, JsonObject>;
-        using ArrayType  = std::vector<ObjectType>;
-        using ValueType  = std::variant<ObjectType, ArrayType>;
-        using DictType   = std::map<std::string, ValueType>;
+        using ArrayType = std::vector<std::any>;
+        using ValueType = std::variant<int64_t, uint64_t, bool, std::string, double, JsonObject, ArrayType>;
+        using DictType  = std::map<std::string, ValueType>;
 
         struct Empty {};
 
@@ -79,20 +79,10 @@ namespace jsbjson
 
                 const ValueType& lValue = lDict[ aKey ];
 
-                if ( std::holds_alternative<ObjectType>( lValue ) ) {
-                    const ObjectType& lObjectTypeVariant = std::get<ObjectType>( lValue );
+                if ( std::holds_alternative<ArrayType>( lValue ) ) {
+                    const ArrayType& lArray = std::get<ArrayType>( lValue );
 
-                    if ( !std::holds_alternative<JsonObject>( lObjectTypeVariant ) ) {
-                        return std::nullopt;
-                    }
-
-                    const JsonObject& lJsonObject = std::get<JsonObject>( lObjectTypeVariant );
-
-                    if ( !lJsonObject.IsArray() ) {
-                        return std::nullopt;
-                    }
-
-                    return std::get<ArrayType>( lJsonObject.Value );
+                    return lArray;
                 }
             }
             else {
@@ -104,14 +94,10 @@ namespace jsbjson
 
                 const ValueType& lValue = lDict[ aKey ];
 
-                if ( std::holds_alternative<ObjectType>( lValue ) ) {
-                    const ObjectType& lObjectTypeVariant = std::get<ObjectType>( lValue );
+                if ( std::holds_alternative<Decayed_t>( lValue ) ) {
+                    const T& lObject = std::get<Decayed_t>( lValue );
 
-                    if ( !std::holds_alternative<Decayed_t>( lObjectTypeVariant ) ) {
-                        return std::nullopt;
-                    }
-
-                    return std::get<Decayed_t>( lObjectTypeVariant );
+                    return lObject;
                 }
             }
 
@@ -166,10 +152,36 @@ namespace jsbjson
             std::string Value;
         };
 
-        ParsedElement          ParsedElement;
-        std::list<JsonObject*> Parents;
-        size_t                 OpeningCount        = 0;
-        size_t                 OpeningBracketCount = 0;
+        struct Parent final
+        {
+            using Parent_t = std::variant<JsonObject*, JsonObject::ArrayType*>;
+            Parent_t Value;
+
+            bool IsArray() const
+            {
+                return std::holds_alternative<JsonObject::ArrayType*>( Value );
+            }
+
+            JsonObject::ArrayType& GetArray()
+            {
+                return *std::get<JsonObject::ArrayType*>( Value );
+            }
+
+            JsonObject& GetObject()
+            {
+                return *std::get<JsonObject*>( Value );
+            }
+
+            template<typename T>
+            constexpr Parent( T* const aParent )
+                : Value( aParent )
+            {}
+        };
+
+        ParsedElement     ParsedElement;
+        std::list<Parent> Parents2;
+        size_t            OpeningCount        = 0;
+        size_t            OpeningBracketCount = 0;
 
     public:
         JsonObject Root;
@@ -185,7 +197,8 @@ namespace jsbjson
                 OpeningCount++;
                 State      = ParseState::InObject;
                 Root.Value = JsonObject::DictType {};
-                Parents.push_back( &Root );
+                // Parents.push_back( &Root );
+                Parents2.push_back( &Root );
                 return true;
             }
 
@@ -199,21 +212,37 @@ namespace jsbjson
             }
 
             if ( aChar == '{' ) {
-                if ( !Parents.back()->IsArray() ) {
+                /*   if ( !Parents.back()->IsArray() ) {
+                       return false;
+                   }
+
+                   OpeningCount++;
+                   JsonObject::ArrayType& lArray = std::get<JsonObject::ArrayType>( Parents.back()->Value );
+                   lArray.push_back( JsonObject {} );
+                   std::any& lObjectAny = lArray.back();
+                   auto&     lObject    = std::any_cast<JsonObject&>( lObjectAny );
+                   Parents.push_back( &lObject );
+                   State = ParseState::InArrayObject;
+                   return true;*/
+                if ( Parents2.empty()
+                     || !Parents2.back().IsArray() )
+                {
                     return false;
                 }
 
                 OpeningCount++;
-                JsonObject::ArrayType& lArray = std::get<JsonObject::ArrayType>( Parents.back()->Value );
-                lArray.push_back( JsonObject {} );
-                JsonObject& lObject = std::get<JsonObject>( lArray.back() );
-                lObject.Value       = JsonObject::DictType {};
-                Parents.push_back( &lObject );
+                JsonObject::ArrayType& lArray = Parents2.back().GetArray();
+                JsonObject             lNewObject;
+                lNewObject.Value = JsonObject::DictType {};
+                lArray.push_back( lNewObject );
+                std::any& lObjectAny = lArray.back();
+                auto&     lObject    = std::any_cast<JsonObject&>( lObjectAny );
+                Parents2.push_back( &lObject );
                 State = ParseState::InArrayObject;
                 return true;
             }
 
-            if ( Parents.back()->IsArray() ) {
+            if ( Parents2.back().IsArray() ) {
                 return ParseValueBegin( aChar );
             }
 
@@ -276,26 +305,35 @@ namespace jsbjson
                 State = ParseState::InObject;
                 OpeningBracketCount++;
 
-                if ( !Parents.back()->IsArray() ) {
-                    std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = JsonObject {};
-                    auto&       lValue                                                            = std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ];
-                    auto&       lVariant                                                          = std::get<JsonObject::ObjectType>( lValue );
-                    JsonObject& lObject                                                           = std::get<JsonObject>( lVariant );
-                    lObject.Value                                                                 = JsonObject::ArrayType {};
-                    Parents.push_back( &lObject );
+                /* if ( !Parents.back()->IsArray() ) {
+                     std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = JsonObject::ArrayType {};
+                     auto& lValue                                                                  = std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ];
+                     auto& lObject                                                                 = std::get<JsonObject>( lValue );
+
+                     lObject.Value = JsonObject::ArrayType {};
+                     Parents.push_back( &lObject );
+                     return true;
+                   }*/
+                if ( !Parents2.back().IsArray() ) {
+                    JsonObject& lParent                                                                       = Parents2.back().GetObject();
+                    std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ] = JsonObject::ArrayType {};
+                    auto& lValue                                                                              = std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ];
+                    auto& lArrayRef                                                                           = std::get<JsonObject::ArrayType>( lValue );
+                    Parents2.push_back( &lArrayRef );
                     return true;
                 }
 
-                JsonObject::ArrayType& lArray = std::get<JsonObject::ArrayType>( Parents.back()->Value );
-                lArray.push_back( JsonObject {} );
-                JsonObject& lObject = std::get<JsonObject>( lArray.back() );
-                Parents.push_back( &lObject );
+                JsonObject::ArrayType& lArray = Parents2.back().GetArray();
+                lArray.push_back( JsonObject::ArrayType {} );
+                JsonObject::ArrayType& lNewParent = std::any_cast<JsonObject::ArrayType&>( lArray.back() );
+
+                Parents2.push_back( &lNewParent );
 
                 return true;
             }
 
             if ( aChar == '{' ) {
-                if ( !Parents.back()->IsArray() ) {
+                if ( !Parents2.back().IsArray() ) {
                     if ( ParsedElement.Name.empty() ) {
                         return false;
                     }
@@ -304,16 +342,17 @@ namespace jsbjson
                 OpeningCount++;
                 State = ParseState::InObject;
 
-                if ( Parents.back()->IsArray() ) {
+                if ( Parents2.back().IsArray() ) {
                     return true;
                 }
 
-                std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = JsonObject {};
-                auto&       lValue                                                            = std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ];
-                auto&       lVariant                                                          = std::get<JsonObject::ObjectType>( lValue );
-                JsonObject& lObject                                                           = std::get<JsonObject>( lVariant );
-                lObject.Value                                                                 = JsonObject::DictType {};
-                Parents.push_back( &lObject );
+                JsonObject& lParent = Parents2.back().GetObject();
+                JsonObject  lNewObject {};
+                lNewObject.Value                                                                          = JsonObject::DictType {};
+                std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ] = lNewObject;
+                auto& lValue                                                                              = std::get<JsonObject::DictType>( lParent.Value )[ ParsedElement.Name ];
+                auto& lObjectRef                                                                          = std::get<JsonObject>( lValue );
+                Parents2.push_back( &lObjectRef );
                 return true;
             }
 
@@ -328,13 +367,14 @@ namespace jsbjson
         {
             State = ParseState::InObjectValueParseFinish;
 
-            if ( Parents.back()->IsArray() ) {
+            if ( Parents2.back().IsArray() ) {
                 State = ParseState::InArrayObjectFinish;
-                std::get<JsonObject::ArrayType>( Parents.back()->Value ).push_back( aValue );
+                // std::get<JsonObject::ArrayType>( Parents.back()->Value ).push_back( aValue );
+                Parents2.back().GetArray().push_back( aValue );
                 return;
             }
 
-            std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = aValue;
+            std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ] = aValue;
         }
 
         bool ParseValueString( const char aChar )
@@ -470,7 +510,7 @@ namespace jsbjson
                 }
 
                 OpeningCount--;
-                Parents.pop_back();
+                Parents2.pop_back();
                 State = ParseState::InObjectFinish;
 
                 return true;
@@ -490,7 +530,7 @@ namespace jsbjson
                     return false;
                 }
 
-                Parents.pop_back();
+                Parents2.pop_back();
                 OpeningCount--;
                 return true;
             }
@@ -540,7 +580,7 @@ namespace jsbjson
                 }
 
                 OpeningBracketCount--;
-                Parents.pop_back();
+                Parents2.pop_back();
                 State = ParseState::InObjectFinish;
                 return true;
             }
@@ -551,7 +591,7 @@ namespace jsbjson
     public:
         bool Parse( const std::string& aDocument )
         {
-            Parents.clear();
+            Parents2.clear();
             Root  = {};
             State = ParseState::Init;
 
@@ -616,7 +656,7 @@ namespace jsbjson
 
             if ( ( State == ParseState::InObjectFinish )
                  && ( OpeningCount == 0 )
-                 && Parents.empty() )
+                 && Parents2.empty() )
             {
                 return true;
             }
