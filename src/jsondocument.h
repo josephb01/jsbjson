@@ -305,15 +305,6 @@ namespace jsbjson
                 State = ParseState::InObject;
                 OpeningBracketCount++;
 
-                /* if ( !Parents.back()->IsArray() ) {
-                     std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ] = JsonObject::ArrayType {};
-                     auto& lValue                                                                  = std::get<JsonObject::DictType>( Parents.back()->Value )[ ParsedElement.Name ];
-                     auto& lObject                                                                 = std::get<JsonObject>( lValue );
-
-                     lObject.Value = JsonObject::ArrayType {};
-                     Parents.push_back( &lObject );
-                     return true;
-                   }*/
                 if ( !Parents2.back().IsArray() ) {
                     JsonObject& lParent                                                                       = Parents2.back().GetObject();
                     std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ] = JsonObject::ArrayType {};
@@ -429,7 +420,7 @@ namespace jsbjson
                  || ( aChar == ',' )
                  || ( aChar == '}' ) )
             {
-                std::optional<std::variant<int64_t, uint64_t, double>> lResult = ToNumber<int64_t, uint64_t, double>( ParsedElement.Value );
+                std::optional<std::variant<int64_t, uint64_t, double>> lResult = ToNumber<uint64_t, int64_t, double>( ParsedElement.Value );
 
                 if ( lResult.has_value() ) {
                     std::visit( [ & ] (auto aValue)
@@ -537,6 +528,16 @@ namespace jsbjson
 
             if ( aChar == ',' ) {
                 State = ParseState::InObject;
+                return true;
+            }
+
+            if ( aChar == ']' ) {
+                if ( OpeningBracketCount == 0 ) {
+                    return false;
+                }
+
+                OpeningBracketCount--;
+                Parents2.pop_back();
                 return true;
             }
 

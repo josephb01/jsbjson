@@ -74,12 +74,11 @@ namespace jsbjson
             { \
                 return Value; \
             } \
-            auto& operator =( const std::vector<T>& aValue ) \
+            auto& operator =( const Type& aValue ) \
             { \
                 Value = aValue; \
                 return Value; \
             } \
-            T& operator ->() { return Value; } \
         private: \
             static constexpr bool IsAJsonMember() { return true; } \
         }; \

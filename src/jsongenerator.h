@@ -7,6 +7,7 @@
 #include <vector>
 #include <list>
 #include <optional>
+#include <limits>
 #include "bindings.h"
 #include "jsonobject.h"
 #include "jsondocument.h"
@@ -138,6 +139,12 @@ namespace jsbjson
     template<class T>
     struct IsObject<T, std::void_t<decltype( T::IsAJsonObject )>>: std::true_type {};
 
+    template<class T, class = void>
+    struct HasConvertRef : std::false_type {};
+
+    template<class T>
+    struct HasConvertRef<T, std::void_t<decltype( std::declval<T&>().ConvertRef() )>>: std::true_type {};
+
     template<typename T>
     class ToJson
     {
@@ -261,15 +268,56 @@ namespace jsbjson
                         MemberT lResult;
 
                         for ( const auto& lItem : lArray.value() ) {
+                            const std::type_info& MemberTypeID = typeid( MemberT );
+                            std::cout << "<" << lItem.type().name() << ";" << MemberTypeID.name() << ">" << std::endl;
+
                             if ( lItem.type() == typeid( ArrayT ) ) {
                                 lResult.push_back( std::any_cast<ArrayT>( lItem ) );
+                            }
+
+                            if ( lItem.type() != typeid( ArrayT ) ) {
+                                if constexpr ( std::is_same_v<ArrayT, uint64_t>) {
+                                    if ( lItem.type() == typeid( int64_t ) ) {
+                                        int64_t lItemValue = std::any_cast<int64_t>( lItem );
+
+                                        if ( lItemValue >= 0 ) {
+                                            lResult.push_back( lItemValue );
+                                        }
+                                    }
+                                }
+
+                                if constexpr ( std::is_same_v<ArrayT, int64_t>) {
+                                    if ( lItem.type() == typeid( uint64_t ) ) {
+                                        uint64_t           lItemValue     = std::any_cast<uint64_t>( lItem );
+                                        constexpr uint64_t lMaxInt64Value = static_cast<uint64_t>( std::numeric_limits<int64_t>::max() );
+
+                                        if ( lMaxInt64Value > lItemValue ) {
+                                            lResult.push_back( lItemValue );
+                                        }
+                                    }
+                                }
+                            }
+
+                            if ( lItem.type() == typeid( JsonObject::ArrayType ) ) {
+                                // TODO
+                            }
+
+                            if ( lItem.type() == typeid( JsonObject ) ) {
+                                if constexpr ( HasConvertRef<ArrayT>::value ) {
+                                    ArrayT lArrayItem;
+
+                                    auto lValuesAsTuple = lArrayItem.ConvertRef();
+                                    std::apply( [ & ] (auto&... aArgs)
+                                                {
+                                                    ( Process<decltype( aArgs )>( std::forward<decltype( aArgs )>( aArgs ), std::any_cast<JsonObject>( lItem ) ), ... );
+                                                }, lValuesAsTuple );
+                                    lResult.push_back( lArrayItem );
+                                }
                             }
                         }
 
                         aMember.Value = lResult;
                     }
-
-                    /*TODO*/
                 }
                 else {
                     std::optional<MemberT> lValue = aJsonObject.GetOpt<MemberT>( std::string { aMember.Name } );
