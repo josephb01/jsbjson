@@ -28,10 +28,10 @@ JsonObjectBeginRoot( complex );
     JsonAddMember( description, std::string );
     JsonAddObjectMember( fruit );
     JsonAddObjectMember( price );
-    JsonAddArrayMember( values, int64_t );
-    JsonAddArrayMember( moreValues, int64_t );
-    JsonAddArrayMember( arrayOfArrays, std::vector<int64_t> );
-    JsonAddArrayMember( arrayOfObjects, arrayItem );
+    JsonAddMember( values, std::vector<int64_t> );
+    JsonAddMember( moreValues, std::vector<int64_t> );
+    JsonAddMember( arrayOfArrays, std::vector<std::vector<uint64_t>> );
+    JsonAddMember( arrayOfObjects, std::vector<arrayItem> );
 JsonObjectEnd( 7 );
 
 JsonObjectBegin( person );
@@ -56,7 +56,7 @@ JsonObjectBeginRoot( number )
 JsonObjectEnd( 3 );
 
 JsonObjectBeginRoot( array )
-    JsonAddArrayMember( values, std::string );
+    JsonAddMember( values, std::vector<std::string> );
 JsonObjectEnd( 1 );
 
 int main()
@@ -119,7 +119,7 @@ int main()
     const std::string& lArrayJson = lArray.ToJson();
     std::cout << lArrayJson << std::endl;
 
-    // std::optional<array> lParsedrray = jsbjson::FromJson<array> {}( lArrayJson );
+    std::optional<array> lParsedrray = jsbjson::FromJson<array> {}( lArrayJson );
 
     jsbjson::JsonDocument lDocument;
     lDocument.Parse( "{\"array\":[\"alma\",\"korte\"]}" );
