@@ -77,15 +77,6 @@ int main()
     };
 
     const std::string& lComplexJson = lComplex.ToJson();
-
-    struct X
-    {
-        void ConvertRef()
-        {
-            return;
-        }
-    };
-
     std::cout << lComplexJson << std::endl;
 
     std::optional<complex> lParsedComplex = jsbjson::FromJson<complex> {}( lComplexJson );

@@ -296,8 +296,8 @@ namespace jsbjson
         }
 
         template<typename OBJECT>
-        void ProcessObject( OBJECT&&    aObject,
-                            JsonObject& aJsonObject )
+        void ProcessObject( OBJECT&&          aObject,
+                            const JsonObject& aJsonObject )
         {
             std::optional<JsonObject> lJsonObject = aJsonObject.GetOpt<JsonObject>( std::string { aObject.Name() } );
 
@@ -313,8 +313,8 @@ namespace jsbjson
         }
 
         template<typename MEMBER>
-        void Process( MEMBER&&    aMember,
-                      JsonObject& aJsonObject )
+        void Process( MEMBER&&          aMember,
+                      const JsonObject& aJsonObject )
         {
             if constexpr ( IsObject<std::decay_t<MEMBER>>::value ) {
                 ProcessObject( std::forward<MEMBER>( aMember ), aJsonObject );

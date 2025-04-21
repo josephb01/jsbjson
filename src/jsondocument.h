@@ -29,49 +29,12 @@ namespace jsbjson
         }
 
         template<typename T>
-        const std::optional<T> GetAsArray( const std::string& aKey )
-        {
-            using Decayed_t = std::decay_t<T>;
-
-            if constexpr ( !std::is_same_v<Decayed_t, ArrayType>) {
-                return std::nullopt;
-            }
-            else {
-                DictType& lDict = std::get<DictType>( Value );
-
-                if ( lDict.count( aKey ) == 0 ) {
-                    return std::nullopt;
-                }
-
-                const ValueType& lValue = lDict[ aKey ];
-
-                if ( std::holds_alternative<ObjectType>( lValue ) ) {
-                    const ObjectType& lObjectTypeVariant = std::get<ObjectType>( lValue );
-
-                    if ( !std::holds_alternative<JsonObject>( lObjectTypeVariant ) ) {
-                        return std::nullopt;
-                    }
-
-                    const JsonObject& lJsonObject = std::get<JsonObject>( lObjectTypeVariant );
-
-                    if ( !lJsonObject.IsArray() ) {
-                        return std::nullopt;
-                    }
-
-                    return std::get<ArrayType>( lJsonObject.Value );
-                }
-            }
-
-            return std::nullopt;
-        }
-
-        template<typename T>
-        std::optional<T> GetOpt( const std::string& aKey )
+        std::optional<T> GetOpt( const std::string& aKey ) const
         {
             using Decayed_t = std::decay_t<T>;
 
             if constexpr ( std::is_same_v<Decayed_t, ArrayType>) {
-                DictType& lDict = std::get<DictType>( Value );
+                DictType lDict = std::get<DictType>( Value );
 
                 if ( lDict.count( aKey ) == 0 ) {
                     return std::nullopt;
@@ -86,7 +49,7 @@ namespace jsbjson
                 }
             }
             else {
-                DictType& lDict = std::get<DictType>( Value );
+                DictType lDict = std::get<DictType>( Value );
 
                 if ( lDict.count( aKey ) == 0 ) {
                     return std::nullopt;
