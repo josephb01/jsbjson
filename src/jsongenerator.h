@@ -7,6 +7,7 @@
 #include <vector>
 #include <list>
 #include <optional>
+#include <limits>
 #include "bindings.h"
 #include "jsonobject.h"
 #include "jsondocument.h"
@@ -98,6 +99,15 @@ namespace jsbjson
     };
 
     template<>
+    struct ToSimpleValue<double>
+    {
+        std::string operator ()( const double aVal )
+        {
+            return std::to_string( aVal );
+        }
+    };
+
+    template<>
     struct ToSimpleValue<bool>
     {
         std::string operator ()( const bool aVal )
@@ -128,6 +138,12 @@ namespace jsbjson
 
     template<class T>
     struct IsObject<T, std::void_t<decltype( T::IsAJsonObject )>>: std::true_type {};
+
+    template<class T, class = void>
+    struct HasConvertRef : std::false_type {};
+
+    template<class T>
+    struct HasConvertRef<T, std::void_t<decltype( std::declval<T&>().ConvertRef() )>>: std::true_type {};
 
     template<typename T>
     class ToJson
@@ -216,17 +232,80 @@ namespace jsbjson
     class FromJson final
     {
     private:
+        template<typename MEMBERTYPE>
+        MEMBERTYPE ExtractArray( const std::vector<std::any>& aSourceArray )
+        {
+            if constexpr ( IsArray<MEMBERTYPE>::value ) {
+                using ArrayT = MEMBERTYPE::value_type;
+                MEMBERTYPE lResult;
+
+                for ( const auto& lItem : aSourceArray ) {
+                    if ( lItem.type() == typeid( JsonObject::ArrayType ) ) {
+                        using InnerArrayType          = MEMBERTYPE::value_type;
+                        std::vector<std::any> lSource = std::any_cast<std::vector<std::any>>( lItem );
+
+                        if constexpr ( IsArray<InnerArrayType>::value ) {
+                            InnerArrayType lInnerResult = ExtractArray<InnerArrayType>( lSource );
+                            lResult.push_back( lInnerResult );
+                        }
+                    }
+
+                    if ( lItem.type() == typeid( ArrayT ) ) {
+                        lResult.push_back( std::any_cast<ArrayT>( lItem ) );
+                    }
+
+                    if ( lItem.type() != typeid( ArrayT ) ) {
+                        if constexpr ( std::is_same_v<ArrayT, uint64_t>) {
+                            if ( lItem.type() == typeid( int64_t ) ) {
+                                int64_t lItemValue = std::any_cast<int64_t>( lItem );
+
+                                if ( lItemValue >= 0 ) {
+                                    lResult.push_back( lItemValue );
+                                }
+                            }
+                        }
+
+                        if constexpr ( std::is_same_v<ArrayT, int64_t>) {
+                            if ( lItem.type() == typeid( uint64_t ) ) {
+                                uint64_t           lItemValue     = std::any_cast<uint64_t>( lItem );
+                                constexpr uint64_t lMaxInt64Value = static_cast<uint64_t>( std::numeric_limits<int64_t>::max() );
+
+                                if ( lMaxInt64Value > lItemValue ) {
+                                    lResult.push_back( lItemValue );
+                                }
+                            }
+                        }
+                    }
+
+                    if ( lItem.type() == typeid( JsonObject ) ) {
+                        if constexpr ( HasConvertRef<ArrayT>::value ) {
+                            ArrayT lArrayItem;
+
+                            auto lValuesAsTuple = lArrayItem.ConvertRef();
+                            std::apply( [ & ] (auto&... aArgs)
+                                        {
+                                            ( Process<decltype( aArgs )>( std::forward<decltype( aArgs )>( aArgs ), std::any_cast<JsonObject>( lItem ) ), ... );
+                                        }, lValuesAsTuple );
+                            lResult.push_back( lArrayItem );
+                        }
+                    }
+                }
+
+                return lResult;
+            }
+        }
+
         template<typename OBJECT>
         void ProcessObject( OBJECT&&    aObject,
                             JsonObject& aJsonObject )
         {
-            auto                      lValuesAsTuple = aObject.ConvertRef();
-            std::optional<JsonObject> lJsonObject    = aJsonObject.Get<JsonObject>( std::string { aObject.Name() } );
+            std::optional<JsonObject> lJsonObject = aJsonObject.GetOpt<JsonObject>( std::string { aObject.Name() } );
 
             if ( !lJsonObject.has_value() ) {
                 return;
             }
 
+            auto lValuesAsTuple = aObject.ConvertRef();
             std::apply( [ & ] (auto&... aArgs)
                         {
                             ( Process<decltype( aArgs )>( std::forward<decltype( aArgs )>( aArgs ), lJsonObject.value() ), ... );
@@ -242,11 +321,22 @@ namespace jsbjson
             }
 
             if constexpr ( IsMember<std::decay_t<MEMBER>>::value ) {
-                using MemberT                 = std::decay_t<MEMBER>::Type;
-                std::optional<MemberT> lValue = aJsonObject.Get<MemberT>( std::string { aMember.Name } );
+                using MemberT = std::decay_t<MEMBER>::Type;
 
-                if ( lValue.has_value() ) {
-                    aMember.Value = lValue.value();
+                if constexpr ( IsArray<MemberT>::value ) {
+                    std::optional<JsonObject::ArrayType> lArray = aJsonObject.GetOpt<JsonObject::ArrayType>( std::string { aMember.Name } );
+
+                    if ( lArray.has_value() ) {
+                        MemberT lResult = ExtractArray<MemberT>( lArray.value() );
+                        aMember.Value   = lResult;
+                    }
+                }
+                else {
+                    std::optional<MemberT> lValue = aJsonObject.GetOpt<MemberT>( std::string { aMember.Name } );
+
+                    if ( lValue.has_value() ) {
+                        aMember.Value = lValue.value();
+                    }
                 }
             }
         }
