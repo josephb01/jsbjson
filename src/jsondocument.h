@@ -94,6 +94,27 @@ namespace jsbjson
 
                 const ValueType& lValue = lDict[ aKey ];
 
+                if constexpr ( std::is_same_v<Decayed_t, uint64_t>) {
+                    if ( std::holds_alternative<int64_t>( lValue ) ) {
+                        int64_t lItemValue = std::get<int64_t>( lValue );
+
+                        if ( lItemValue >= 0 ) {
+                            return lItemValue;
+                        }
+                    }
+                }
+
+                if constexpr ( std::is_same_v<Decayed_t, int64_t>) {
+                    if ( std::holds_alternative<uint64_t>( lValue ) ) {
+                        uint64_t           lItemValue     = std::get<uint64_t>( lValue );
+                        constexpr uint64_t lMaxInt64Value = static_cast<uint64_t>( std::numeric_limits<int64_t>::max() );
+
+                        if ( lMaxInt64Value > lItemValue ) {
+                            return lItemValue;
+                        }
+                    }
+                }
+
                 if ( std::holds_alternative<Decayed_t>( lValue ) ) {
                     const T& lObject = std::get<Decayed_t>( lValue );
 
@@ -123,7 +144,7 @@ namespace jsbjson
         std::variant<Empty, ArrayType, DictType> Value = Empty {};
     };
 
-    struct JsonDocument
+    class JsonDocument
     {
     private:
         enum class ParseState
@@ -143,10 +164,10 @@ namespace jsbjson
             , InObjectFinish
         };
 
-        ParseState State = ParseState::Init;
+        ParseState mState = ParseState::Init;
 
     private:
-        struct ParsedElement
+        struct ParsedElement final
         {
             std::string Name;
             std::string Value;
@@ -178,10 +199,10 @@ namespace jsbjson
             {}
         };
 
-        ParsedElement     ParsedElement;
-        std::list<Parent> Parents2;
-        size_t            OpeningCount        = 0;
-        size_t            OpeningBracketCount = 0;
+        ParsedElement     mParsedElement;
+        std::list<Parent> mParents;
+        size_t            mOpeningCurlyCount  = 0;
+        size_t            mOpeningSquareCount = 0;
 
     public:
         JsonObject Root;
@@ -194,11 +215,10 @@ namespace jsbjson
             }
 
             if ( aChar == '{' ) {
-                OpeningCount++;
-                State      = ParseState::InObject;
+                mOpeningCurlyCount++;
+                mState     = ParseState::InObject;
                 Root.Value = JsonObject::DictType {};
-                // Parents.push_back( &Root );
-                Parents2.push_back( &Root );
+                mParents.push_back( &Root );
                 return true;
             }
 
@@ -212,43 +232,31 @@ namespace jsbjson
             }
 
             if ( aChar == '{' ) {
-                /*   if ( !Parents.back()->IsArray() ) {
-                       return false;
-                   }
-
-                   OpeningCount++;
-                   JsonObject::ArrayType& lArray = std::get<JsonObject::ArrayType>( Parents.back()->Value );
-                   lArray.push_back( JsonObject {} );
-                   std::any& lObjectAny = lArray.back();
-                   auto&     lObject    = std::any_cast<JsonObject&>( lObjectAny );
-                   Parents.push_back( &lObject );
-                   State = ParseState::InArrayObject;
-                   return true;*/
-                if ( Parents2.empty()
-                     || !Parents2.back().IsArray() )
+                if ( mParents.empty()
+                     || !mParents.back().IsArray() )
                 {
                     return false;
                 }
 
-                OpeningCount++;
-                JsonObject::ArrayType& lArray = Parents2.back().GetArray();
+                mOpeningCurlyCount++;
+                JsonObject::ArrayType& lArray = mParents.back().GetArray();
                 JsonObject             lNewObject;
                 lNewObject.Value = JsonObject::DictType {};
                 lArray.push_back( lNewObject );
                 std::any& lObjectAny = lArray.back();
                 auto&     lObject    = std::any_cast<JsonObject&>( lObjectAny );
-                Parents2.push_back( &lObject );
-                State = ParseState::InArrayObject;
+                mParents.push_back( &lObject );
+                mState = ParseState::InArrayObject;
                 return true;
             }
 
-            if ( Parents2.back().IsArray() ) {
+            if ( mParents.back().IsArray() ) {
                 return ParseValueBegin( aChar );
             }
 
             if ( aChar == '\"' ) {
-                State              = ParseState::InObjectName;
-                ParsedElement.Name = "";
+                mState              = ParseState::InObjectName;
+                mParsedElement.Name = "";
                 return true;
             }
 
@@ -258,11 +266,11 @@ namespace jsbjson
         bool ParseInObjectName( const char aChar )
         {
             if ( aChar == '\"' ) {
-                State = ParseState::InObjectValueDelimiter;
+                mState = ParseState::InObjectValueDelimiter;
                 return true;
             }
 
-            ParsedElement.Name += aChar;
+            mParsedElement.Name += aChar;
             return true;
         }
 
@@ -273,7 +281,7 @@ namespace jsbjson
             }
 
             if ( aChar == ':' ) {
-                State = ParseState::InObjectValueParseBegin;
+                mState = ParseState::InObjectValueParseBegin;
                 return true;
             }
 
@@ -287,68 +295,68 @@ namespace jsbjson
             }
 
             if ( aChar == '\"' ) {
-                State               = ParseState::InObjectValueParseString;
-                ParsedElement.Value = std::string {};
+                mState               = ParseState::InObjectValueParseString;
+                mParsedElement.Value = std::string {};
                 return true;
             }
 
             if ( ( std::toupper( aChar ) == 'T' )
                  || ( std::toupper( aChar ) == 'F' ) )
             {
-                State               = ParseState::InObjectValueParseBool;
-                ParsedElement.Value = std::string {};
+                mState               = ParseState::InObjectValueParseBool;
+                mParsedElement.Value = std::string {};
 
                 return ParseValueBoolean( aChar );
             }
 
             if ( aChar == '[' ) {
-                State = ParseState::InObject;
-                OpeningBracketCount++;
+                mState = ParseState::InObject;
+                mOpeningSquareCount++;
 
-                if ( !Parents2.back().IsArray() ) {
-                    JsonObject& lParent                                                                       = Parents2.back().GetObject();
-                    std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ] = JsonObject::ArrayType {};
-                    auto& lValue                                                                              = std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ];
-                    auto& lArrayRef                                                                           = std::get<JsonObject::ArrayType>( lValue );
-                    Parents2.push_back( &lArrayRef );
+                if ( !mParents.back().IsArray() ) {
+                    JsonObject& lParent                                                                        = mParents.back().GetObject();
+                    std::get<JsonObject::DictType>( mParents.back().GetObject().Value )[ mParsedElement.Name ] = JsonObject::ArrayType {};
+                    auto& lValue                                                                               = std::get<JsonObject::DictType>( mParents.back().GetObject().Value )[ mParsedElement.Name ];
+                    auto& lArrayRef                                                                            = std::get<JsonObject::ArrayType>( lValue );
+                    mParents.push_back( &lArrayRef );
                     return true;
                 }
 
-                JsonObject::ArrayType& lArray = Parents2.back().GetArray();
+                JsonObject::ArrayType& lArray = mParents.back().GetArray();
                 lArray.push_back( JsonObject::ArrayType {} );
                 JsonObject::ArrayType& lNewParent = std::any_cast<JsonObject::ArrayType&>( lArray.back() );
 
-                Parents2.push_back( &lNewParent );
+                mParents.push_back( &lNewParent );
 
                 return true;
             }
 
             if ( aChar == '{' ) {
-                if ( !Parents2.back().IsArray() ) {
-                    if ( ParsedElement.Name.empty() ) {
+                if ( !mParents.back().IsArray() ) {
+                    if ( mParsedElement.Name.empty() ) {
                         return false;
                     }
                 }
 
-                OpeningCount++;
-                State = ParseState::InObject;
+                mOpeningCurlyCount++;
+                mState = ParseState::InObject;
 
-                if ( Parents2.back().IsArray() ) {
+                if ( mParents.back().IsArray() ) {
                     return true;
                 }
 
-                JsonObject& lParent = Parents2.back().GetObject();
+                JsonObject& lParent = mParents.back().GetObject();
                 JsonObject  lNewObject {};
-                lNewObject.Value                                                                          = JsonObject::DictType {};
-                std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ] = lNewObject;
-                auto& lValue                                                                              = std::get<JsonObject::DictType>( lParent.Value )[ ParsedElement.Name ];
-                auto& lObjectRef                                                                          = std::get<JsonObject>( lValue );
-                Parents2.push_back( &lObjectRef );
+                lNewObject.Value                                                                           = JsonObject::DictType {};
+                std::get<JsonObject::DictType>( mParents.back().GetObject().Value )[ mParsedElement.Name ] = lNewObject;
+                auto& lValue                                                                               = std::get<JsonObject::DictType>( lParent.Value )[ mParsedElement.Name ];
+                auto& lObjectRef                                                                           = std::get<JsonObject>( lValue );
+                mParents.push_back( &lObjectRef );
                 return true;
             }
 
-            State = ParseState::InObjectValueParseNumber;
-            ParsedElement.Value.clear();
+            mState = ParseState::InObjectValueParseNumber;
+            mParsedElement.Value.clear();
 
             return ParseValueNumber( aChar );
         }
@@ -356,55 +364,57 @@ namespace jsbjson
         template<typename T>
         void AddValueToParent( const T& aValue )
         {
-            State = ParseState::InObjectValueParseFinish;
+            mState = ParseState::InObjectValueParseFinish;
 
-            if ( Parents2.back().IsArray() ) {
-                State = ParseState::InArrayObjectFinish;
-                // std::get<JsonObject::ArrayType>( Parents.back()->Value ).push_back( aValue );
-                Parents2.back().GetArray().push_back( aValue );
+            if ( mParents.back().IsArray() ) {
+                mState = ParseState::InArrayObjectFinish;
+                mParents.back().GetArray().push_back( aValue );
                 return;
             }
 
-            std::get<JsonObject::DictType>( Parents2.back().GetObject().Value )[ ParsedElement.Name ] = aValue;
+            std::get<JsonObject::DictType>( mParents.back().GetObject().Value )[ mParsedElement.Name ] = aValue;
         }
 
         bool ParseValueString( const char aChar )
         {
             if ( aChar == '\"' ) {
-                AddValueToParent( ParsedElement.Value );
+                AddValueToParent( mParsedElement.Value );
                 return true;
             }
 
-            ParsedElement.Value += aChar;
+            mParsedElement.Value += aChar;
 
             return true;
+        }
+
+        template<typename NUMBER>
+        std::optional<std::variant<int64_t, uint64_t, double>> GetNumber( const std::string& aString )
+        {
+            NUMBER lNumber {};
+            auto [ lPtr, lErrorCode ] = std::from_chars( aString.data(), aString.data() + aString.size(), lNumber );
+
+            if ( ( lPtr == aString.data() + aString.size() )
+                 && ( lErrorCode == std::errc() ) )
+            {
+                std::variant<int64_t, uint64_t, double> lVariant;
+                lVariant.emplace<NUMBER>( lNumber );
+                return lVariant;
+            }
+
+            return std::nullopt;
         }
 
         template<typename HEAD, typename... TAIL>
         std::optional<std::variant<int64_t, uint64_t, double>> ToNumber( const std::string& aString )
         {
             if constexpr ( sizeof...( TAIL ) == 0 ) {
-                HEAD lNumber {};
-                auto [ lPtr, lErrorCode ] = std::from_chars( aString.data(), aString.data() + aString.size(), lNumber );
-
-                if ( ( lPtr == aString.data() + aString.size() )
-                     && ( lErrorCode == std::errc() ) )
-                {
-                    std::variant<int64_t, uint64_t, double> lVariant;
-                    lVariant.emplace<HEAD>( lNumber );
-                    return lVariant;
-                }
+                return GetNumber<HEAD>( aString );
             }
             else {
-                HEAD lNumber {};
-                auto [ lPtr, lErrorCode ] = std::from_chars( aString.data(), aString.data() + aString.size(), lNumber );
+                auto lNumber = GetNumber<HEAD>( aString );
 
-                if ( ( lPtr == aString.data() + aString.size() )
-                     && ( lErrorCode == std::errc() ) )
-                {
-                    std::variant<int64_t, uint64_t, double> lVariant;
-                    lVariant.emplace<HEAD>( lNumber );
-                    return lVariant;
+                if ( lNumber.has_value() ) {
+                    return lNumber;
                 }
 
                 return ToNumber<TAIL...>( aString );
@@ -420,7 +430,7 @@ namespace jsbjson
                  || ( aChar == ',' )
                  || ( aChar == '}' ) )
             {
-                std::optional<std::variant<int64_t, uint64_t, double>> lResult = ToNumber<uint64_t, int64_t, double>( ParsedElement.Value );
+                std::optional<std::variant<int64_t, uint64_t, double>> lResult = ToNumber<uint64_t, int64_t, double>( mParsedElement.Value );
 
                 if ( lResult.has_value() ) {
                     std::visit( [ & ] (auto aValue)
@@ -432,18 +442,18 @@ namespace jsbjson
                     return false;
                 }
 
-                if ( State == ParseState::InArrayObjectFinish ) {
+                if ( mState == ParseState::InArrayObjectFinish ) {
                     return ParseInArrayObjectFinish( aChar );
                 }
 
-                if ( State == ParseState::InObjectValueParseFinish ) {
+                if ( mState == ParseState::InObjectValueParseFinish ) {
                     return ParseValueFinish( aChar );
                 }
 
                 return false;
             }
 
-            ParsedElement.Value += aChar;
+            mParsedElement.Value += aChar;
 
             return true;
         }
@@ -457,10 +467,10 @@ namespace jsbjson
             {
                 bool lParsedValue = false;
 
-                if ( ParsedElement.Value == "true" ) {
+                if ( mParsedElement.Value == "true" ) {
                     lParsedValue = true;
                 }
-                else if ( ParsedElement.Value == "false" ) {
+                else if ( mParsedElement.Value == "false" ) {
                     lParsedValue = false;
                 }
                 else {
@@ -469,18 +479,18 @@ namespace jsbjson
 
                 AddValueToParent( lParsedValue );
 
-                if ( State == ParseState::InArrayObjectFinish ) {
+                if ( mState == ParseState::InArrayObjectFinish ) {
                     return ParseInArrayObjectFinish( aChar );
                 }
 
-                if ( State == ParseState::InObjectValueParseFinish ) {
+                if ( mState == ParseState::InObjectValueParseFinish ) {
                     return ParseValueFinish( aChar );
                 }
 
                 return false;
             }
 
-            ParsedElement.Value += aChar;
+            mParsedElement.Value += aChar;
             return true;
         }
 
@@ -491,18 +501,18 @@ namespace jsbjson
             }
 
             if ( aChar == ',' ) {
-                State = ParseState::InObject;
+                mState = ParseState::InObject;
                 return true;
             }
 
             if ( aChar == '}' ) {
-                if ( OpeningCount == 0 ) {
+                if ( mOpeningCurlyCount == 0 ) {
                     return false;
                 }
 
-                OpeningCount--;
-                Parents2.pop_back();
-                State = ParseState::InObjectFinish;
+                mOpeningCurlyCount--;
+                mParents.pop_back();
+                mState = ParseState::InObjectFinish;
 
                 return true;
             }
@@ -517,27 +527,27 @@ namespace jsbjson
             }
 
             if ( aChar == '}' ) {
-                if ( OpeningCount == 0 ) {
+                if ( mOpeningCurlyCount == 0 ) {
                     return false;
                 }
 
-                Parents2.pop_back();
-                OpeningCount--;
+                mParents.pop_back();
+                mOpeningCurlyCount--;
                 return true;
             }
 
             if ( aChar == ',' ) {
-                State = ParseState::InObject;
+                mState = ParseState::InObject;
                 return true;
             }
 
             if ( aChar == ']' ) {
-                if ( OpeningBracketCount == 0 ) {
+                if ( mOpeningSquareCount == 0 ) {
                     return false;
                 }
 
-                OpeningBracketCount--;
-                Parents2.pop_back();
+                mOpeningSquareCount--;
+                mParents.pop_back();
                 return true;
             }
 
@@ -551,13 +561,13 @@ namespace jsbjson
             }
 
             if ( aChar == '}' ) {
-                State = ParseState::InArrayObjectFinish;
+                mState = ParseState::InArrayObjectFinish;
                 return true;
             }
 
             if ( aChar == '\"' ) {
-                State              = ParseState::InObjectName;
-                ParsedElement.Name = "";
+                mState              = ParseState::InObjectName;
+                mParsedElement.Name = "";
                 return true;
             }
 
@@ -571,18 +581,18 @@ namespace jsbjson
             }
 
             if ( aChar == ',' ) {
-                State = ParseState::InObject;
+                mState = ParseState::InObject;
                 return true;
             }
 
             if ( aChar == ']' ) {
-                if ( OpeningBracketCount == 0 ) {
+                if ( mOpeningSquareCount == 0 ) {
                     return false;
                 }
 
-                OpeningBracketCount--;
-                Parents2.pop_back();
-                State = ParseState::InObjectFinish;
+                mOpeningSquareCount--;
+                mParents.pop_back();
+                mState = ParseState::InObjectFinish;
                 return true;
             }
 
@@ -592,58 +602,58 @@ namespace jsbjson
     public:
         bool Parse( const std::string& aDocument )
         {
-            Parents2.clear();
-            Root  = {};
-            State = ParseState::Init;
+            mParents.clear();
+            Root   = {};
+            mState = ParseState::Init;
 
             for ( const auto lChar : aDocument ) {
                 bool lParseResult = [ this ] ( const char bChar )->bool
                                     {
-                                        if ( State == ParseState::Init ) {
+                                        if ( mState == ParseState::Init ) {
                                             return ParseInit( bChar );
                                         }
 
-                                        if ( State == ParseState::InObject ) {
+                                        if ( mState == ParseState::InObject ) {
                                             return ParseInObject( bChar );
                                         }
 
-                                        if ( State == ParseState::InObjectName ) {
+                                        if ( mState == ParseState::InObjectName ) {
                                             return ParseInObjectName( bChar );
                                         }
 
-                                        if ( State == ParseState::InObjectValueDelimiter ) {
+                                        if ( mState == ParseState::InObjectValueDelimiter ) {
                                             return ParseValueDelimiter( bChar );
                                         }
 
-                                        if ( State == ParseState::InObjectValueParseBegin ) {
+                                        if ( mState == ParseState::InObjectValueParseBegin ) {
                                             return ParseValueBegin( bChar );
                                         }
 
-                                        if ( State == ParseState::InObjectValueParseString ) {
+                                        if ( mState == ParseState::InObjectValueParseString ) {
                                             return ParseValueString( bChar );
                                         }
 
-                                        if ( State == ParseState::InObjectValueParseBool ) {
+                                        if ( mState == ParseState::InObjectValueParseBool ) {
                                             return ParseValueBoolean( bChar );
                                         }
 
-                                        if ( State == ParseState::InObjectValueParseNumber ) {
+                                        if ( mState == ParseState::InObjectValueParseNumber ) {
                                             return ParseValueNumber( bChar );
                                         }
 
-                                        if ( State == ParseState::InObjectValueParseFinish ) {
+                                        if ( mState == ParseState::InObjectValueParseFinish ) {
                                             return ParseValueFinish( bChar );
                                         }
 
-                                        if ( State == ParseState::InObjectFinish ) {
+                                        if ( mState == ParseState::InObjectFinish ) {
                                             return PareseObjectFinish( bChar );
                                         }
 
-                                        if ( State == ParseState::InArrayObject ) {
+                                        if ( mState == ParseState::InArrayObject ) {
                                             return ParseInArrayObject( bChar );
                                         }
 
-                                        if ( State == ParseState::InArrayObjectFinish ) {
+                                        if ( mState == ParseState::InArrayObjectFinish ) {
                                             return ParseInArrayObjectFinish( bChar );
                                         }
 
@@ -655,9 +665,10 @@ namespace jsbjson
                 }
             }
 
-            if ( ( State == ParseState::InObjectFinish )
-                 && ( OpeningCount == 0 )
-                 && Parents2.empty() )
+            if ( ( mState == ParseState::InObjectFinish )
+                 && ( mOpeningCurlyCount == 0 )
+                 && ( mOpeningSquareCount == 0 )
+                 && mParents.empty() )
             {
                 return true;
             }
