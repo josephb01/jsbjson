@@ -8,6 +8,8 @@
 #include <list>
 #include <optional>
 #include <limits>
+#include <utility>
+#include <array>
 #include "bindings.h"
 #include "jsonobject.h"
 #include "jsondocument.h"
@@ -232,6 +234,9 @@ namespace jsbjson
     class FromJson final
     {
     private:
+        OBJECT mObject;
+
+    private:
         template<typename MEMBERTYPE>
         MEMBERTYPE ExtractArray( const std::vector<std::any>& aSourceArray )
         {
@@ -241,8 +246,8 @@ namespace jsbjson
 
                 for ( const auto& lItem : aSourceArray ) {
                     if ( lItem.type() == typeid( JsonObject::ArrayType ) ) {
-                        using InnerArrayType          = MEMBERTYPE::value_type;
-                        std::vector<std::any> lSource = std::any_cast<std::vector<std::any>>( lItem );
+                        using InnerArrayType = MEMBERTYPE::value_type;
+                        JsonArray lSource    = std::any_cast<JsonArray>( lItem );
 
                         if constexpr ( IsArray<InnerArrayType>::value ) {
                             InnerArrayType lInnerResult = ExtractArray<InnerArrayType>( lSource );
@@ -354,14 +359,90 @@ namespace jsbjson
                 return std::nullopt;
             }
 
-            OBJECT lObject;
-            auto   lValuesAsTuple = lObject.ConvertRef();
+            auto lValuesAsTuple = mObject.ConvertRef();
             std::apply( [ & ] (auto&... aArgs)
                         {
                             ( Process<decltype( aArgs )>( std::forward<decltype( aArgs )>( aArgs ), lDocument.Root ), ... );
                         }, lValuesAsTuple );
 
-            return lObject;
+            return mObject;
+        }
+
+        template<class Func, class Tuple, size_t N = 0>
+        void runtime_get( Func   func,
+                          Tuple& tup,
+                          size_t idx )
+        {
+            if ( N == idx ) {
+                auto& val = std::get<N>( tup );
+                func( std::get<N>( tup ) );
+                return;
+            }
+
+            if constexpr ( N + 1 < std::tuple_size_v<Tuple>) {
+                return runtime_get<Func, Tuple, N + 1>( func, tup, idx );
+            }
+        }
+
+        template<typename OBJ>
+        void Proc( OBJ&        aObj,
+                   JsonObject& aJson )
+        {
+            if constexpr ( !HasConvertRef<OBJ>::value ) {
+                return;
+            }
+            else {
+                std::map<std::string, size_t> lIndexer;
+                auto                          lValuesAsTuple = aObj.ConvertRef();
+                size_t                        lIndex         = 0;
+
+                std::apply( [ & ] (auto&... aArgs)
+                            {
+                                ( ( lIndexer[ std::string( aArgs.Name ) ] = lIndex++ ), ... );
+                            }, lValuesAsTuple );
+                aJson.Visit( [ & ] (const std::string& aKey, auto aValue)
+                             {
+                                 auto const& lIt = lIndexer.find( aKey );
+
+                                 if ( lIt == lIndexer.cend() ) {
+                                     return;
+                                 }
+
+                                 auto lSetter = [ this, &aValue ] (auto& aValToSet)
+                                                {
+                                                    using T = std::decay_t<decltype( aValue )>;
+
+                                                    if constexpr ( std::is_same_v<std::decay_t<decltype( aValue )>, std::decay_t<decltype( aValToSet.Value )>>) {
+                                                        aValToSet.Value = aValue;
+                                                    }
+
+                                                    if constexpr ( std::is_same_v<T, JsonObject>) {
+                                                        Proc( aValToSet, aValue );
+                                                    }
+
+                                                    if constexpr ( std::is_same_v<T, JsonObject::ArrayType>) {}
+                                                };
+                                 runtime_get( lSetter, lValuesAsTuple, lIt->second );
+                             } );
+            }
+        }
+
+        std::optional<std::decay_t<OBJECT>> Visit( const std::string& aJsonDocument )
+        {
+            if constexpr ( !IsObject<OBJECT>::value ) {
+                return std::nullopt;
+            }
+
+            JsonDocument lDocument;
+
+            if ( !lDocument.Parse( aJsonDocument ) ) {
+                return std::nullopt;
+            }
+
+            Proc( mObject, lDocument.Root );
+            auto lValuesAsTuple = mObject.ConvertRef();
+
+            return mObject;
         }
     };
 }

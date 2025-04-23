@@ -10,22 +10,28 @@
 
 namespace jsbjson
 {
+    struct JsonArray final : public std::vector<std::any>
+    {
+        template<typename FUNCTION>
+        void Visit( const FUNCTION& aVisitFunction ) const
+        {
+            for ( const auto& lValue : *this ) {
+                aVisitFunction( lValue );
+            }
+        }
+    };
+
     struct JsonObject
     {
-        using ArrayType = std::vector<std::any>;
+        using ArrayType = JsonArray;                                                                                                       // std::vector<std::any>;
         using ValueType = std::variant<int64_t, uint64_t, bool, std::string, double, JsonObject, ArrayType>;
         using DictType  = std::map<std::string, ValueType>;
 
         struct Empty {};
 
-        bool IsArray() const
-        {
-            return std::holds_alternative<ArrayType>( Value );
-        }
-
         bool IsEmpty() const
         {
-            return std::holds_alternative<Empty>( Value );
+            return Value.empty();
         }
 
         template<typename T>
@@ -34,13 +40,13 @@ namespace jsbjson
             using Decayed_t = std::decay_t<T>;
 
             if constexpr ( std::is_same_v<Decayed_t, ArrayType>) {
-                DictType lDict = std::get<DictType>( Value );
-
-                if ( lDict.count( aKey ) == 0 ) {
+                if ( Value.count( aKey ) == 0 ) {
                     return std::nullopt;
                 }
 
-                const ValueType& lValue = lDict[ aKey ];
+                const auto& lIt = Value.find( aKey );
+
+                const ValueType& lValue = lIt->second;
 
                 if ( std::holds_alternative<ArrayType>( lValue ) ) {
                     const ArrayType& lArray = std::get<ArrayType>( lValue );
@@ -49,13 +55,13 @@ namespace jsbjson
                 }
             }
             else {
-                DictType lDict = std::get<DictType>( Value );
-
-                if ( lDict.count( aKey ) == 0 ) {
+                if ( Value.count( aKey ) == 0 ) {
                     return std::nullopt;
                 }
 
-                const ValueType& lValue = lDict[ aKey ];
+                const auto& lIt = Value.find( aKey );
+
+                const ValueType& lValue = lIt->second;
 
                 if constexpr ( std::is_same_v<Decayed_t, uint64_t>) {
                     if ( std::holds_alternative<int64_t>( lValue ) ) {
@@ -97,14 +103,25 @@ namespace jsbjson
 
         size_t Size() const
         {
-            if ( IsArray() ) {
-                return std::get<ArrayType>( Value ).size();
-            }
-
-            return std::get<DictType>( Value ).size();
+            return Value.size();
         }
 
-        std::variant<Empty, ArrayType, DictType> Value = Empty {};
+        template<typename FUNCTION>
+        void Visit( const FUNCTION& aVisitFunction )
+        {
+            if ( IsEmpty() ) {
+                return;
+            }
+
+            for ( const auto& [ lKey, lValue ] : Value ) {
+                std::visit( [ & ] (const auto& aValue)
+                            {
+                                aVisitFunction( lKey, aValue );
+                            }, lValue );
+            }
+        }
+
+        DictType Value;
     };
 
     class JsonDocument
@@ -277,10 +294,10 @@ namespace jsbjson
                 mOpeningSquareCount++;
 
                 if ( !mParents.back().IsArray() ) {
-                    JsonObject& lParent                                                                        = mParents.back().GetObject();
-                    std::get<JsonObject::DictType>( mParents.back().GetObject().Value )[ mParsedElement.Name ] = JsonObject::ArrayType {};
-                    auto& lValue                                                                               = std::get<JsonObject::DictType>( mParents.back().GetObject().Value )[ mParsedElement.Name ];
-                    auto& lArrayRef                                                                            = std::get<JsonObject::ArrayType>( lValue );
+                    JsonObject& lParent                                      = mParents.back().GetObject();
+                    mParents.back().GetObject().Value[ mParsedElement.Name ] = JsonObject::ArrayType {};
+                    auto& lValue                                             = mParents.back().GetObject().Value[ mParsedElement.Name ];
+                    auto& lArrayRef                                          = std::get<JsonObject::ArrayType>( lValue );
                     mParents.push_back( &lArrayRef );
                     return true;
                 }
@@ -310,10 +327,10 @@ namespace jsbjson
 
                 JsonObject& lParent = mParents.back().GetObject();
                 JsonObject  lNewObject {};
-                lNewObject.Value                                                                           = JsonObject::DictType {};
-                std::get<JsonObject::DictType>( mParents.back().GetObject().Value )[ mParsedElement.Name ] = lNewObject;
-                auto& lValue                                                                               = std::get<JsonObject::DictType>( lParent.Value )[ mParsedElement.Name ];
-                auto& lObjectRef                                                                           = std::get<JsonObject>( lValue );
+                lNewObject.Value                                         = JsonObject::DictType {};
+                mParents.back().GetObject().Value[ mParsedElement.Name ] = lNewObject;
+                auto& lValue                                             = lParent.Value[ mParsedElement.Name ];
+                auto& lObjectRef                                         = std::get<JsonObject>( lValue );
                 mParents.push_back( &lObjectRef );
                 return true;
             }
@@ -335,7 +352,7 @@ namespace jsbjson
                 return;
             }
 
-            std::get<JsonObject::DictType>( mParents.back().GetObject().Value )[ mParsedElement.Name ] = aValue;
+            mParents.back().GetObject().Value[ mParsedElement.Name ] = aValue;
         }
 
         bool ParseValueString( const char aChar )

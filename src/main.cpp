@@ -103,6 +103,30 @@ int main()
     const std::string& lNumberJson = lNumber.ToJson();
     std::cout << lNumberJson << std::endl;
 
+    jsbjson::JsonDocument lVisitor;
+
+    if ( lVisitor.Parse( lNumberJson ) ) {
+        lVisitor.Root.Visit( [] (const std::string& aKey, const auto& aValue)
+                             {
+                                 using T                      = std::decay_t<decltype( aValue )>;
+                                 constexpr bool lIsJsonObject = std::is_same_v<T, jsbjson::JsonObject>;
+                                 constexpr bool lIsArray      = std::is_same_v<T, jsbjson::JsonObject::ArrayType>;
+
+                                 if constexpr ( !lIsJsonObject
+                                                && !lIsArray )
+                                 {
+                                     std::cout << aKey << ":" << aValue << std::endl;
+                                 }
+
+                                 if constexpr ( lIsArray ) {
+                                     aValue.Visit( [] ( const std::any& aValue )
+                                                   {} );
+                                 }
+                             } );
+    }
+
+    std::optional<number> lXXX = jsbjson::FromJson<number> {}.Visit( lNumberJson );
+
     std::optional<number> lParsedNumber = jsbjson::FromJson<number> {}( lNumberJson );
 
     array lArray;
