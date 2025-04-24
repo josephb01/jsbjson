@@ -1,5 +1,6 @@
 #pragma once
 #include <string_view>
+#include <iostream>
 #include "bindings.h"
 
 namespace jsbjson
@@ -29,13 +30,15 @@ namespace jsbjson
 
 #define UNIQUE_NAME( base ) CONCAT( base, __COUNTER__ )
 
-#define CreateMember( aName, aType, aStructName ) \
+#define CreateMember( aName, aType, aStructName, aMandatory ) \
         template<typename T> \
         struct aStructName \
         { \
             using Type                             = T; \
             static constexpr std::string_view Name = STRING( aName ); \
             T                                 Value; \
+            static constexpr bool             IsMandatory = aMandatory; \
+            bool                              IsSet       = false; \
             aStructName( const T& aVal ) \
                 : Value( aVal ) \
             {} \
@@ -47,10 +50,10 @@ namespace jsbjson
             } \
             auto& operator =( const T& aValue ) \
             { \
+                IsSet = true; \
                 Value = aValue; \
                 return Value; \
             } \
-            T& operator ->() { return Value; } \
         private: \
             static constexpr bool IsAJsonMember() { return true; } \
         }; \
@@ -59,13 +62,6 @@ namespace jsbjson
 
 #define JsonObjectBegin( aName ) \
         struct aName { \
-            template<typename...ARGS> \
-            static aName Create( const ARGS & ... aArgs ) \
-            { \
-                using TupleType = std::tuple<ARGS...>; \
-                TupleType Tuple = std::make_tuple( aArgs... ); \
-                return jsbjson::to_struct<aName, TupleType>( std::move( Tuple ) ); \
-            } \
             constexpr std::string_view Name() const { return STRING( aName ); } \
         private: \
             static constexpr bool IsAJsonObject() { return true; } \
@@ -76,12 +72,12 @@ namespace jsbjson
                 return jsbjson::ToJson<aName> {}( *this, true ); \
             }
 #define JsonAddMember( aName, aType ) \
-        CreateMember( aName, aType, UNIQUE_NAME( aName ) )
-#define JsonAddArrayMember( aName, aType ) \
-        CreateArrayMember( aName, aType, UNIQUE_NAME( aName ) )
-#define JsonAddObjectMember( aType ) aType aType;
+        CreateMember( aName, aType, UNIQUE_NAME( aName ), false )
+#define JsonAddMandatoryMember( aName, aType ) \
+        CreateMember( aName, aType, UNIQUE_NAME( aName ), true )
+#define JsonAddObjectMember( aType )          aType aType;
+#define JsonAddMandatoryObjectMember( aType ) aType aType;
 #define JsonObjectEnd( aMemberCount ) \
-        constexpr size_t MemberCount() const { return aMemberCount; } \
         auto Convert() const { return ToTuple<aMemberCount> {}( *this ); } \
         auto ConvertRef() { return ToRefTuple<aMemberCount> {}( *this ); } \
         };
