@@ -154,6 +154,7 @@ namespace jsbjson
         auto GetOuterArrayAsList( const Variant& aVariant )
         {
             return GetArrayAsList<int32_t, uint32_t, std::string, bool, double, JsonElement, std::any>( aVariant );
+            //TODO make recursive array check
         }
 
         template<typename ARRAY>
