@@ -23,7 +23,7 @@ namespace jsbjson
 
     struct JsonObject
     {
-        using ArrayType = JsonArray;                                                                                                       // std::vector<std::any>;
+        using ArrayType = JsonArray;
         using ValueType = std::variant<int64_t, uint64_t, bool, std::string, double, JsonObject, ArrayType>;
         using DictType  = std::map<std::string, ValueType>;
 

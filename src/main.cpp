@@ -4,6 +4,7 @@
 #include "jsonobject.h"
 #include "jsongenerator.h"
 #include "jsondocument.h"
+#include "frommap.h"
 
 JsonObjectBegin( justForFun )
     JsonAddMember( funny, std::string );
@@ -118,4 +119,30 @@ int main()
     lDocument.Parse( "{\"array\":[{\"type\":\"fruit\", \"value\":\"3\"},\"korte\"]}" );
 
     const jsbjson::JsonObject::ArrayType lObject = lDocument.Root.Get<jsbjson::JsonObject::ArrayType>( "array" );
+
+    std::vector<int32_t> l;
+
+    if ( jsbjson::IsArray<std::vector<std::vector<int32_t>>>::value ) {
+        int debug = 3;
+    }
+
+    jsbjson::FromMap     lFromMap;
+    jsbjson::JsonElement lRootMap;
+    jsbjson::JsonElement lMap;
+    /* lMap[ "alma" ] = jsbjson::JsonElement {
+         { std::string( "bicigli" ), 333 }
+       };*/
+    /*  lMap[ "price" ]        = 534;
+       lMap[ "array" ]        = std::vector<std::string> { "egy", "ketto" };
+       lMap[ "variantArray" ] = std::vector<std::any> { std::string( "harom" ), 666 };
+       lMap[ "objectArray" ]  = std::vector<jsbjson::JsonElement> {
+          {
+              { std::string { "obj" }, 23 }, { std::string { "test" }, true }
+          }
+       };*/
+    lMap[ "arrayOfArray" ] = std::vector<std::vector<int32_t>> {
+        { 1, 2, 3 }, { 4, 5, 6 }
+    };
+    // lRootMap[ "root" ] = lMap;
+    std::cout << lFromMap( lMap );
 }
