@@ -33,22 +33,42 @@ namespace jsbjson
     struct HasConvertRef<T, std::void_t<decltype( std::declval<T&>().ConvertRef() )>>: std::true_type {};
 
     template<typename T, std::size_t Depth>
-    struct RecursiveTypeGenerator
+    struct VectorDepth
     {
-        using type = typename RecursiveTypeGenerator<std::vector<T>, Depth - 1>::type;
+        using type = typename VectorDepth<std::vector<std::vector<T>>, Depth - 1>::type;
     };
 
-// Specialization for Depth 1
+
     template<typename T>
-    struct RecursiveTypeGenerator<T, 1>
+    struct VectorDepth<T, 1>
+    {
+        using type = std::vector<std::vector<T>>;
+    };
+
+
+    template<typename T>
+    struct VectorDepth<T, 0>
     {
         using type = std::vector<T>;
     };
 
-// Specialization for Depth 0 (optional, if needed)
-    template<typename T>
-    struct RecursiveTypeGenerator<T, 0>
+    template<typename T, std::size_t Depth>
+    struct ListDepth
     {
-        using type = T;
+        using type = typename ListDepth<std::list<std::list<T>>, Depth - 1>::type;
+    };
+
+
+    template<typename T>
+    struct ListDepth<T, 1>
+    {
+        using type = std::list<std::list<T>>;
+    };
+
+
+    template<typename T>
+    struct ListDepth<T, 0>
+    {
+        using type = std::list<T>;
     };
 }

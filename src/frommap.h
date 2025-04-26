@@ -21,7 +21,7 @@ namespace jsbjson
         template<typename... ARGS>
         struct sVariantHelper
         {
-            using Variant = std::variant<std::vector<ARGS>..., std::list<ARGS>...>;
+            using Variant = std::variant<typename VectorDepth<ARGS, 0>::type..., typename ListDepth<ARGS, 0>::type..., typename VectorDepth<ARGS, 1>::type..., typename ListDepth<ARGS, 1>::type..., typename VectorDepth<ARGS, 2>::type..., typename ListDepth<ARGS, 2>::type...>;
         };
 
         using Variant = sVariantHelper<int32_t, uint32_t, std::string, bool, double, JsonElement, std::any>::Variant;
@@ -55,105 +55,110 @@ namespace jsbjson
             return {};
         }
 
-        template<typename HEAD, typename...TAIL>
+        template<size_t DEPTH, typename HEAD, typename...TAIL>
         bool IsValueAnArray( const std::any& aValue )
         {
             if constexpr ( sizeof...( TAIL ) == 0 ) {
-                return aValue.type() == typeid( std::vector<HEAD> )
-                       || aValue.type() == typeid( std::list<HEAD> );
+                return aValue.type() == typeid( typename VectorDepth<HEAD, DEPTH>::type )
+                       || aValue.type() == typeid( typename ListDepth<HEAD, DEPTH>::type );
             }
             else {
-                return aValue.type() == typeid( std::vector<HEAD> )
-                       || aValue.type() == typeid( std::list<HEAD> )
-                       || IsValueAnArray<TAIL...>( aValue );
+                return aValue.type() == typeid( typename VectorDepth<HEAD, DEPTH>::type )
+                       || aValue.type() == typeid( typename ListDepth<HEAD, DEPTH>::type )
+                       || IsValueAnArray<DEPTH, TAIL...>( aValue );
             }
 
             return false;
         }
 
-        bool IsOneValueAnArray( const std::any& aValue )
+        template<size_t DEPTH>
+        std::tuple<bool, size_t> IsOneValueAnArray( const std::any& aValue )
         {
-            return IsValueAnArray<int32_t, uint32_t, bool, std::string, double, JsonElement, std::any>( aValue );
+            if constexpr ( DEPTH > 5 ) {
+                return std::make_tuple( false, 0 );
+            }
+
+            if constexpr ( DEPTH == 0 ) {
+                return std::make_tuple( IsValueAnArray<0, int32_t, uint32_t, bool, std::string, double, JsonElement, std::any>( aValue ), DEPTH );
+            }
+            else {
+                if ( IsValueAnArray<DEPTH, int32_t, uint32_t, bool, std::string, double, JsonElement, std::any>( aValue ) ) {
+                    return std::make_tuple( true, DEPTH );
+                }
+
+                return IsOneValueAnArray<DEPTH - 1>( aValue );
+            }
         }
 
-        template<typename HEAD, typename...TAIL>
+        template<size_t DEPTH, typename HEAD, typename...TAIL>
         auto ToArray( const std::any& aValue )->std::optional<Variant>
         {
             if constexpr ( sizeof...( TAIL ) == 0 ) {
-                if ( aValue.type() == typeid( std::vector<HEAD> ) ) {
-                    return std::any_cast<std::vector<HEAD>>( aValue );
+                if ( aValue.type() == typeid( typename VectorDepth<HEAD, DEPTH>::type ) ) {
+                    return std::any_cast<typename VectorDepth<HEAD, DEPTH>::type>( aValue );
                 }
 
-                if ( aValue.type() == typeid( std::list<HEAD> ) ) {
-                    return std::any_cast<std::list<HEAD>>( aValue );
+                if ( aValue.type() == typeid( typename ListDepth<HEAD, DEPTH>::type ) ) {
+                    return std::any_cast<typename ListDepth<HEAD, DEPTH>::type>( aValue );
                 }
 
                 return std::nullopt;
             }
             else {
-                if ( aValue.type() == typeid( std::vector<HEAD> ) ) {
-                    return std::any_cast<std::vector<HEAD>>( aValue );
+                if ( aValue.type() == typeid( typename VectorDepth<HEAD, DEPTH>::type ) ) {
+                    return std::any_cast<typename VectorDepth<HEAD, DEPTH>::type>( aValue );
                 }
 
-                if ( aValue.type() == typeid( std::list<HEAD> ) ) {
-                    return std::any_cast<std::list<HEAD>>( aValue );
+                if ( aValue.type() == typeid( typename ListDepth<HEAD, DEPTH>::type ) ) {
+                    return std::any_cast<typename ListDepth<HEAD, DEPTH>::type>( aValue );
                 }
 
-                return ToArray<TAIL...>( aValue );
+                return ToArray<DEPTH, TAIL...>( aValue );
             }
         }
 
+        template<size_t DEPTH>
         auto ToArrayOuter( const std::any& aValue )->std::optional<Variant>
         {
-            return ToArray<int32_t, uint32_t, std::string, bool, double, JsonElement, std::any>( aValue );
+            if constexpr ( DEPTH > 5 ) {
+                return std::nullopt;
+            }
+
+            return ToArray<DEPTH, int32_t, uint32_t, std::string, bool, double, JsonElement, std::any>( aValue );
         }
 
-        template<typename T>
-        using OptionalList = std::optional<std::list<T>>;
-
         template<typename TYPE>
-        OptionalList<TYPE> GetOneAsList( const Variant& aVariant )
+        std::optional<TYPE> GetOne( const Variant& aVariant )
         {
-            if ( std::holds_alternative<std::list<TYPE>>( aVariant ) ) {
-                return std::get<std::list<TYPE>>( aVariant );
+            if ( std::holds_alternative<TYPE>( aVariant ) ) {
+                return std::get<TYPE>( aVariant );
             }
 
             return std::nullopt;
         }
 
-        template<typename HEAD, typename... TAIL>
-        auto GetArrayAsList( const Variant& aVariant )->std::tuple<OptionalList<HEAD>, OptionalList<TAIL>...>
+        template<size_t DEPTH, typename HEAD, typename... TAIL>
+        auto GetArrayAsVector( const Variant& aVariant )
         {
-            return std::make_tuple( GetOneAsList<HEAD>( aVariant ), GetOneAsList<TAIL>( aVariant ) ... );
+            return std::make_tuple( GetOne<typename VectorDepth<HEAD, DEPTH>::type>( aVariant ), GetOne<VectorDepth<TAIL, DEPTH>::type>( aVariant ) ... );
         }
 
-        template<typename T>
-        using OptionalVector = std::optional<std::vector<T>>;
-
-        template<typename TYPE>
-        OptionalVector<TYPE> GetOneAsVector( const Variant& aVariant )
+        template<size_t DEPTH, typename HEAD, typename... TAIL>
+        auto GetArrayAsList( const Variant& aVariant )
         {
-            if ( std::holds_alternative<std::vector<TYPE>>( aVariant ) ) {
-                return std::get<std::vector<TYPE>>( aVariant );
-            }
-
-            return std::nullopt;
+            return std::make_tuple( GetOne<typename ListDepth<HEAD, DEPTH>::type>( aVariant ), GetOne<typename ListDepth<TAIL, DEPTH>::type>( aVariant ) ... );
         }
 
-        template<typename HEAD, typename... TAIL>
-        auto GetArrayAsVector( const Variant& aVariant )->std::tuple<OptionalVector<HEAD>, OptionalVector<TAIL>...>
-        {
-            return std::make_tuple( GetOneAsVector<HEAD>( aVariant ), GetOneAsVector<TAIL>( aVariant ) ... );
-        }
-
+        template<size_t DEPTH>
         auto GetOuterArrayAsVector( const Variant& aVariant )
         {
-            return GetArrayAsVector<int32_t, uint32_t, std::string, bool, double, JsonElement, std::any>( aVariant );
+            return GetArrayAsVector<DEPTH, int32_t, uint32_t, std::string, bool, double, JsonElement, std::any>( aVariant );
         }
 
+        template<size_t DEPTH>
         auto GetOuterArrayAsList( const Variant& aVariant )
         {
-            return GetArrayAsList<int32_t, uint32_t, std::string, bool, double, JsonElement, std::any>( aVariant );
+            return GetArrayAsList<DEPTH, int32_t, uint32_t, std::string, bool, double, JsonElement, std::any>( aVariant );
         }
 
         template<typename ARRAY>
@@ -170,35 +175,87 @@ namespace jsbjson
                 }
 
                 if constexpr ( std::is_same_v<Decayed_t, std::any>) {
-                    if ( IsOneValueAnArray( lItem ) ) {
-                        std::optional<Variant> lArrayOpt = ToArrayOuter( lItem );
+                    std::tuple<bool, size_t> lIsArray = IsOneValueAnArray<2>( lItem );
 
+                    if ( std::get<bool>( lIsArray ) ) {
+                        std::optional<Variant> lArrayOpt;
+                        size_t                 lDepth = std::get<size_t>( lIsArray );
+
+                        if ( lDepth == 0 ) {
+                            lArrayOpt = ToArrayOuter<0>( lItem );
+                        }
+
+                        if ( lDepth == 1 ) {
+                            lArrayOpt = ToArrayOuter<1>( lItem );
+                        }
+
+                        if ( lDepth == 2 ) {
+                            lArrayOpt = ToArrayOuter<2>( lItem );
+                        }
+
+                        /*   if ( lDepth == 3 ) {
+                               lArrayOpt = ToArrayOuter<3>( lItem );
+                           }
+
+                           if ( lDepth == 4 ) {
+                               lArrayOpt = ToArrayOuter<4>( lItem );
+                           }
+
+                           if ( lDepth == 5 ) {
+                               lArrayOpt = ToArrayOuter<5>( lItem );
+                           }
+                         */
                         if ( lArrayOpt.has_value() ) {
-                            const auto lArrayTuple = GetOuterArrayAsVector( lArrayOpt.value() );
-                            bool       lSuccess    = false;
-                            {
-                                VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
-                                            {
-                                                if ( aValue.has_value() ) {
-                                                    lSuccess = true;
-                                                    lResult += "[" + ProcessArray( aValue.value() ) + "]";
-                                                }
-                                            } );
+                            if ( lDepth == 0 ) {
+                                const auto lArrayTuple = GetOuterArrayAsVector<0>( lArrayOpt.value() );
+                                bool       lSuccess    = false;
+                                {
+                                    VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
+                                                {
+                                                    if ( aValue.has_value() ) {
+                                                        lSuccess = true;
+                                                        lResult += "[" + ProcessArray( aValue.value() ) + "]";
+                                                    }
+                                                } );
+                                }
 
-                                if ( lSuccess ) {
-                                    continue;
+                                if ( !lSuccess ) {
+                                    const auto lArrayTuple = GetOuterArrayAsList<0>( lArrayOpt.value() );
+
+                                    VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
+                                                {
+                                                    if ( aValue.has_value() ) {
+                                                        lSuccess = true;
+                                                        lResult += "[" + ProcessArray( aValue.value() ) + "]";
+                                                    }
+                                                } );
                                 }
                             }
-                            {
-                                const auto lArrayTuple = GetOuterArrayAsList( lArrayOpt.value() );
 
-                                VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
-                                            {
-                                                if ( aValue.has_value() ) {
-                                                    lSuccess = true;
-                                                    lResult += "[" + ProcessArray( aValue.value() ) + "]";
-                                                }
-                                            } );
+                            if ( lDepth == 1 ) {
+                                const auto lArrayTuple = GetOuterArrayAsVector<1>( lArrayOpt.value() );
+                                bool       lSuccess    = false;
+                                {
+                                    VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
+                                                {
+                                                    if ( aValue.has_value() ) {
+                                                        lSuccess = true;
+                                                        lResult += "[" + ProcessArray( aValue.value() ) + "]";
+                                                    }
+                                                } );
+                                }
+
+                                if ( !lSuccess ) {
+                                    const auto lArrayTuple = GetOuterArrayAsList<1>( lArrayOpt.value() );
+
+                                    VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
+                                                {
+                                                    if ( aValue.has_value() ) {
+                                                        lSuccess = true;
+                                                        lResult += "[" + ProcessArray( aValue.value() ) + "]";
+                                                    }
+                                                } );
+                                }
                             }
                         }
                     }
@@ -241,34 +298,88 @@ namespace jsbjson
             size_t lIndex = 0;
 
             for ( const auto& [ lKey, lValue ] : aElement ) {
-                lResult += "\"" + lKey + "\":";
+                lResult                          += "\"" + lKey + "\":";
+                std::tuple<bool, size_t> lIsArray = IsOneValueAnArray<2>( lValue );
 
-                if ( IsOneValueAnArray( lValue ) ) {
-                    std::optional<Variant> lArrayOpt = ToArrayOuter( lValue );
+                if ( std::get<bool>( lIsArray ) ) {
+                    std::optional<Variant> lArrayOpt;
+                    size_t                 lDepth = std::get<size_t>( lIsArray );
+
+                    if ( lDepth == 0 ) {
+                        lArrayOpt = ToArrayOuter<0>( lValue );
+                    }
+
+                    if ( lDepth == 1 ) {
+                        lArrayOpt = ToArrayOuter<1>( lValue );
+                    }
+
+                    if ( lDepth == 2 ) {
+                        lArrayOpt = ToArrayOuter<2>( lValue );
+                    }
+
+                    /*   if ( lDepth == 3 ) {
+                           lArrayOpt = ToArrayOuter<3>( lValue );
+                       }
+
+                       if ( lDepth == 4 ) {
+                           lArrayOpt = ToArrayOuter<4>( lValue );
+                       }
+
+                       if ( lDepth == 5 ) {
+                           lArrayOpt = ToArrayOuter<5>( lValue );
+                       }*/
 
                     if ( lArrayOpt.has_value() ) {
-                        const auto lArrayTuple = GetOuterArrayAsVector( lArrayOpt.value() );
-                        bool       lSuccess    = false;
-                        {
-                            VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
-                                        {
-                                            if ( aValue.has_value() ) {
-                                                lSuccess = true;
-                                                lResult += "[" + ProcessArray( aValue.value() ) + "]";
-                                            }
-                                        } );
+                        if ( lDepth == 0 ) {
+                            const auto lArrayTuple = GetOuterArrayAsVector<0>( lArrayOpt.value() );
+                            bool       lSuccess    = false;
+                            {
+                                VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
+                                            {
+                                                if ( aValue.has_value() ) {
+                                                    lSuccess = true;
+                                                    lResult += "[" + ProcessArray( aValue.value() ) + "]";
+                                                }
+                                            } );
+                            }
+
+                            if ( !lSuccess ) {
+                                const auto lArrayTuple = GetOuterArrayAsList<0>( lArrayOpt.value() );
+
+                                VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
+                                            {
+                                                if ( aValue.has_value() ) {
+                                                    lSuccess = true;
+                                                    lResult += "[" + ProcessArray( aValue.value() ) + "]";
+                                                }
+                                            } );
+                            }
                         }
 
-                        if ( !lSuccess ) {
-                            const auto lArrayTuple = GetOuterArrayAsList( lArrayOpt.value() );
+                        if ( lDepth == 1 ) {
+                            const auto lArrayTuple = GetOuterArrayAsVector<1>( lArrayOpt.value() );
+                            bool       lSuccess    = false;
+                            {
+                                VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
+                                            {
+                                                if ( aValue.has_value() ) {
+                                                    lSuccess = true;
+                                                    lResult += "[" + ProcessArray( aValue.value() ) + "]";
+                                                }
+                                            } );
+                            }
 
-                            VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
-                                        {
-                                            if ( aValue.has_value() ) {
-                                                lSuccess = true;
-                                                lResult += "[" + ProcessArray( aValue.value() ) + "]";
-                                            }
-                                        } );
+                            if ( !lSuccess ) {
+                                const auto lArrayTuple = GetOuterArrayAsList<1>( lArrayOpt.value() );
+
+                                VisitTuple( lArrayTuple, [ &lSuccess, &lResult, this ] (const auto& aValue)
+                                            {
+                                                if ( aValue.has_value() ) {
+                                                    lSuccess = true;
+                                                    lResult += "[" + ProcessArray( aValue.value() ) + "]";
+                                                }
+                                            } );
+                            }
                         }
                     }
                 }

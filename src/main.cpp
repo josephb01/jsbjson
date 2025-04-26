@@ -132,14 +132,14 @@ int main()
     /* lMap[ "alma" ] = jsbjson::JsonElement {
          { std::string( "bicigli" ), 333 }
        };*/
-    /*  lMap[ "price" ]        = 534;
-       lMap[ "array" ]        = std::vector<std::string> { "egy", "ketto" };
-       lMap[ "variantArray" ] = std::vector<std::any> { std::string( "harom" ), 666 };
-       lMap[ "objectArray" ]  = std::vector<jsbjson::JsonElement> {
-          {
-              { std::string { "obj" }, 23 }, { std::string { "test" }, true }
-          }
-       };*/
+    // lMap[ "price" ]        = 534;
+    lMap[ "array" ]        = std::vector<std::string> { "egy", "ketto" };
+    lMap[ "variantArray" ] = std::vector<std::any> { std::string( "harom" ), 666 };
+    lMap[ "objectArray" ]  = std::vector<jsbjson::JsonElement> {
+        {
+            { std::string { "obj" }, 23 }, { std::string { "test" }, true }
+        }
+    };
     lMap[ "arrayOfArray" ] = std::vector<std::vector<int32_t>> {
         { 1, 2, 3 }, { 4, 5, 6 }
     };
