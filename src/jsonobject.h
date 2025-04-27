@@ -1,25 +1,7 @@
 #pragma once
 #include <string_view>
+#include <iostream>
 #include "bindings.h"
-
-namespace jsbjson
-{
-    template<class S, std::size_t... Is, class Tup>
-    S to_struct( std::index_sequence<Is...>,
-                 Tup&& tup )
-    {
-        using std::get;
-        return { get<Is>( std::forward<Tup>( tup ) ) ... };
-    }
-
-    template<class S, class Tup>
-    S to_struct( Tup&& tup )
-    {
-        using T = std::remove_reference_t<Tup>;
-
-        return to_struct<S>( std::make_index_sequence<std::tuple_size<T> {}> {}, std::forward<Tup>( tup ) );
-    }
-}
 
 #define STRING( a ) STR( a )
 #define STR( a )    #a
@@ -36,6 +18,7 @@ namespace jsbjson
             using Type                             = T; \
             static constexpr std::string_view Name = STRING( aName ); \
             T                                 Value; \
+            bool                              IsSet = false; \
             aStructName( const T& aVal ) \
                 : Value( aVal ) \
             {} \
@@ -47,10 +30,10 @@ namespace jsbjson
             } \
             auto& operator =( const T& aValue ) \
             { \
+                IsSet = true; \
                 Value = aValue; \
                 return Value; \
             } \
-            T& operator ->() { return Value; } \
         private: \
             static constexpr bool IsAJsonMember() { return true; } \
         }; \
@@ -59,13 +42,6 @@ namespace jsbjson
 
 #define JsonObjectBegin( aName ) \
         struct aName { \
-            template<typename...ARGS> \
-            static aName Create( const ARGS & ... aArgs ) \
-            { \
-                using TupleType = std::tuple<ARGS...>; \
-                TupleType Tuple = std::make_tuple( aArgs... ); \
-                return jsbjson::to_struct<aName, TupleType>( std::move( Tuple ) ); \
-            } \
             constexpr std::string_view Name() const { return STRING( aName ); } \
         private: \
             static constexpr bool IsAJsonObject() { return true; } \
@@ -77,11 +53,8 @@ namespace jsbjson
             }
 #define JsonAddMember( aName, aType ) \
         CreateMember( aName, aType, UNIQUE_NAME( aName ) )
-#define JsonAddArrayMember( aName, aType ) \
-        CreateArrayMember( aName, aType, UNIQUE_NAME( aName ) )
 #define JsonAddObjectMember( aType ) aType aType;
 #define JsonObjectEnd( aMemberCount ) \
-        constexpr size_t MemberCount() const { return aMemberCount; } \
         auto Convert() const { return ToTuple<aMemberCount> {}( *this ); } \
         auto ConvertRef() { return ToRefTuple<aMemberCount> {}( *this ); } \
         };

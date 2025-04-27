@@ -8,143 +8,16 @@
 #include <list>
 #include <optional>
 #include <limits>
+#include <utility>
+#include <array>
 #include "bindings.h"
 #include "jsonobject.h"
 #include "jsondocument.h"
+#include "tovalue.h"
+#include "typehelpers.h"
 
 namespace jsbjson
 {
-    template<typename>
-    struct IsArray : std::false_type {};
-
-    template<typename T, typename...A>
-    struct IsArray<std::vector<T, A...>>: std::true_type {};
-
-    template<typename T, typename...A>
-    struct IsArray<std::list<T, A...>>: std::true_type {};
-
-    template<typename T>
-    struct ToSimpleValue {};
-
-    template<>
-    struct ToSimpleValue<int8_t>
-    {
-        std::string operator ()( const int8_t aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<int16_t>
-    {
-        std::string operator ()( const int16_t aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<int32_t>
-    {
-        std::string operator ()( const int32_t aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<int64_t>
-    {
-        std::string operator ()( const int64_t aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<uint8_t>
-    {
-        std::string operator ()( const int8_t aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<uint16_t>
-    {
-        std::string operator ()( const uint16_t aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<uint32_t>
-    {
-        std::string operator ()( const uint32_t aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<uint64_t>
-    {
-        std::string operator ()( const uint64_t aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<double>
-    {
-        std::string operator ()( const double aVal )
-        {
-            return std::to_string( aVal );
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<bool>
-    {
-        std::string operator ()( const bool aVal )
-        {
-            return aVal
-                   ? std::string { "true" }
-                   : std::string { "false" };
-        }
-    };
-
-    template<>
-    struct ToSimpleValue<std::string>
-    {
-        std::string operator ()( const std::string aVal )
-        {
-            return "\"" + aVal + "\"";
-        }
-    };
-
-    template<class T, class = void>
-    struct IsMember : std::false_type {};
-
-    template<class T>
-    struct IsMember<T, std::void_t<decltype( T::IsAJsonMember )>>: std::true_type {};
-
-    template<class T, class = void>
-    struct IsObject : std::false_type {};
-
-    template<class T>
-    struct IsObject<T, std::void_t<decltype( T::IsAJsonObject )>>: std::true_type {};
-
-    template<class T, class = void>
-    struct HasConvertRef : std::false_type {};
-
-    template<class T>
-    struct HasConvertRef<T, std::void_t<decltype( std::declval<T&>().ConvertRef() )>>: std::true_type {};
-
     template<typename T>
     class ToJson
     {
@@ -232,6 +105,9 @@ namespace jsbjson
     class FromJson final
     {
     private:
+        OBJECT mObject;
+
+    private:
         template<typename MEMBERTYPE>
         MEMBERTYPE ExtractArray( const std::vector<std::any>& aSourceArray )
         {
@@ -241,8 +117,8 @@ namespace jsbjson
 
                 for ( const auto& lItem : aSourceArray ) {
                     if ( lItem.type() == typeid( JsonObject::ArrayType ) ) {
-                        using InnerArrayType          = MEMBERTYPE::value_type;
-                        std::vector<std::any> lSource = std::any_cast<std::vector<std::any>>( lItem );
+                        using InnerArrayType = MEMBERTYPE::value_type;
+                        JsonArray lSource    = std::any_cast<JsonArray>( lItem );
 
                         if constexpr ( IsArray<InnerArrayType>::value ) {
                             InnerArrayType lInnerResult = ExtractArray<InnerArrayType>( lSource );
@@ -296,8 +172,8 @@ namespace jsbjson
         }
 
         template<typename OBJECT>
-        void ProcessObject( OBJECT&&    aObject,
-                            JsonObject& aJsonObject )
+        void ProcessObject( OBJECT&&          aObject,
+                            const JsonObject& aJsonObject )
         {
             std::optional<JsonObject> lJsonObject = aJsonObject.GetOpt<JsonObject>( std::string { aObject.Name() } );
 
@@ -313,8 +189,8 @@ namespace jsbjson
         }
 
         template<typename MEMBER>
-        void Process( MEMBER&&    aMember,
-                      JsonObject& aJsonObject )
+        void Process( MEMBER&&          aMember,
+                      const JsonObject& aJsonObject )
         {
             if constexpr ( IsObject<std::decay_t<MEMBER>>::value ) {
                 ProcessObject( std::forward<MEMBER>( aMember ), aJsonObject );
@@ -354,14 +230,13 @@ namespace jsbjson
                 return std::nullopt;
             }
 
-            OBJECT lObject;
-            auto   lValuesAsTuple = lObject.ConvertRef();
+            auto lValuesAsTuple = mObject.ConvertRef();
             std::apply( [ & ] (auto&... aArgs)
                         {
                             ( Process<decltype( aArgs )>( std::forward<decltype( aArgs )>( aArgs ), lDocument.Root ), ... );
                         }, lValuesAsTuple );
 
-            return lObject;
+            return mObject;
         }
     };
 }
