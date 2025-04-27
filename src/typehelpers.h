@@ -35,16 +35,8 @@ namespace jsbjson
     template<typename T, std::size_t Depth>
     struct VectorDepth
     {
-        using type = typename VectorDepth<std::vector<std::vector<T>>, Depth - 1>::type;
+        using type = typename VectorDepth<std::vector<T>, Depth - 1>::type;
     };
-
-
-    template<typename T>
-    struct VectorDepth<T, 1>
-    {
-        using type = std::vector<std::vector<T>>;
-    };
-
 
     template<typename T>
     struct VectorDepth<T, 0>
@@ -55,14 +47,7 @@ namespace jsbjson
     template<typename T, std::size_t Depth>
     struct ListDepth
     {
-        using type = typename ListDepth<std::list<std::list<T>>, Depth - 1>::type;
-    };
-
-
-    template<typename T>
-    struct ListDepth<T, 1>
-    {
-        using type = std::list<std::list<T>>;
+        using type = typename ListDepth<std::list<T>, Depth - 1>::type;
     };
 
 
