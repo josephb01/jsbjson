@@ -1,10 +1,13 @@
 ﻿#include <string_view>
 #include <typeinfo>
 #include <iostream>
+#include <memory>
 #include "jsonobject.h"
 #include "jsongenerator.h"
 #include "jsondocument.h"
 #include "frommap.h"
+#include "parser.h"
+#include "testparsenofitier.h"
 
 JsonObjectBegin( justForFun )
     JsonAddMember( funny, std::string );
@@ -80,6 +83,9 @@ int main()
     const std::string& lComplexJson = lComplex.ToJson();
     std::cout << lComplexJson << std::endl;
 
+    jsbjson::JsonParser lMyParser;
+    bool                lSuccess = lMyParser.Parse( lComplexJson, std::make_shared<jsbjson::TestParserNotifier>() );
+
     std::optional<complex> lParsedComplex = jsbjson::FromJson<complex> {}( lComplexJson );
 
     std::optional<simple> lParsed = jsbjson::FromJson<simple> {}( "{\"description\":\"Simple test object\",\"person\":{\"name\":\"John\",\"location\":\"USA\"}}" );
@@ -129,10 +135,10 @@ int main()
     jsbjson::FromMap     lFromMap;
     jsbjson::JsonElement lRootMap;
     jsbjson::JsonElement lMap;
-    /* lMap[ "alma" ] = jsbjson::JsonElement {
-         { std::string( "bicigli" ), 333 }
-       };*/
-    // lMap[ "price" ]        = 534;
+    lMap[ "alma" ] = jsbjson::JsonElement {
+        { std::string( "bicigli" ), 333 }
+    };
+    lMap[ "price" ]        = 534;
     lMap[ "array" ]        = std::vector<std::string> { "egy", "ketto" };
     lMap[ "variantArray" ] = std::vector<std::any> { std::string( "harom" ), 666 };
     lMap[ "objectArray" ]  = std::vector<jsbjson::JsonElement> {
