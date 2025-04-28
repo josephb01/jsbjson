@@ -18,15 +18,23 @@ namespace jsbjson
                 return false;
             }
 
+            aNotifier->OnParsingStarted();
+
             for ( const auto& lChar : aJsonDocument ) {
                 if ( !CallStateFunction( lChar, aNotifier ) ) {
                     return false;
                 }
             }
 
-            return mInfo.Parent.empty()
-                   && mOpeningCurlyCount == 0
-                   && mOpeningSquareCount == 0;
+            if ( mInfo.Parent.empty()
+                 && ( mOpeningCurlyCount == 0 )
+                 && ( mOpeningSquareCount == 0 ) )
+            {
+                aNotifier->OnParsingFinished();
+                return true;
+            }
+
+            return false;
         }
 
     private:
@@ -43,20 +51,27 @@ namespace jsbjson
             , ParseValueFinish
         };
 
-        enum eParent
+        struct ParentData final
         {
-            Object
-            , Array
-            , Unknown
+            enum eParent
+            {
+                Object
+                , Array
+                , Unknown
+            };
+
+            eParent Parent;
+            size_t  ParentID = 0;
         };
 
         using eValueType = IParserNotifier::eValueType;
         struct ParseInfo final
         {
-            std::string        Name;
-            std::string        Value;
-            std::list<eParent> Parent;
-            eValueType         ValueType = eValueType::Unknown;
+            std::string           Name;
+            std::string           Value;
+            std::list<ParentData> Parent;
+            std::list<size_t>     IDs;
+            eValueType            ValueType = eValueType::Unknown;
         };
 
     private:
@@ -64,6 +79,13 @@ namespace jsbjson
         ParseInfo    mInfo;
         size_t       mOpeningCurlyCount  = 0;
         size_t       mOpeningSquareCount = 0;
+        size_t       mObjectID           = 0;
+
+    private:
+        size_t GetNextID()
+        {
+            return ++mObjectID;
+        }
 
     private:
         bool CallStateFunction( const char                              aChar,
@@ -117,8 +139,11 @@ namespace jsbjson
             }
 
             if ( aChar == '{' ) {
-                aNotifier->OnObjectBegin();
-                mInfo.Parent.push_back( eParent::Object );
+                const size_t lID = GetNextID();
+                mInfo.IDs.push_back( lID );
+                aNotifier->OnObjectBegin( lID, 0 );
+                mInfo.Parent.push_back( { ParentData::eParent::Object, lID } );
+
                 mOpeningCurlyCount++;
                 mState = eParserState::InObjectBegin;
                 return true;
@@ -140,12 +165,12 @@ namespace jsbjson
                 return true;
             }
 
-            mInfo.Value           = {};
-            const eParent lParent = mInfo.Parent.back();
+            mInfo.Value              = {};
+            const ParentData lParent = mInfo.Parent.back();
 
-            if ( lParent == eParent::Object ) {
+            if ( lParent.Parent == ParentData::eParent::Object ) {
                 if ( aChar == '\"' ) {
-                    aNotifier->OnItemBegin();
+                    aNotifier->OnItemBegin( lParent.ParentID );
                     mInfo.Name = {};
                     mState     = eParserState::InItemName;
                     return true;
@@ -156,7 +181,7 @@ namespace jsbjson
             }
 
             mState = eParserState::InItemValue;
-            aNotifier->OnItemBegin();
+            aNotifier->OnItemBegin( lParent.ParentID );
             return DoInItemValue( aChar, aNotifier );
         }
 
@@ -197,16 +222,20 @@ namespace jsbjson
             }
 
             if ( aChar == '[' ) {
-                aNotifier->OnArrayBegin();
-                mInfo.Parent.push_back( eParent::Array );
+                const size_t lID = GetNextID();
+                aNotifier->OnArrayBegin( lID, mInfo.Parent.back().ParentID );
+                mInfo.Parent.push_back( { ParentData::eParent::Array, lID } );
+                mInfo.IDs.push_back( lID );
                 mOpeningSquareCount++;
                 mState = eParserState::InItemValue;
                 return true;
             }
 
             if ( aChar == '{' ) {
-                aNotifier->OnObjectBegin();
-                mInfo.Parent.push_back( eParent::Object );
+                const size_t lID = GetNextID();
+                aNotifier->OnObjectBegin( lID, mInfo.Parent.back().ParentID );
+                mInfo.Parent.push_back( { ParentData::eParent::Object, lID } );
+                mInfo.IDs.push_back( lID );
                 mOpeningCurlyCount++;
                 mState = eParserState::InObjectBegin;
                 return true;
@@ -249,7 +278,7 @@ namespace jsbjson
                                  const std::shared_ptr<IParserNotifier>& aNotifier )
         {
             if ( aChar == '\"' ) {
-                aNotifier->OnItemValue( mInfo.Value );
+                aNotifier->OnItemValue( mInfo.Value, mInfo.Parent.back().ParentID );
                 mState = eParserState::ParseValueFinish;
                 return true;
             }
@@ -264,7 +293,7 @@ namespace jsbjson
             if ( ( mInfo.Value == "true" )
                  || ( mInfo.Value == "false" ) )
             {
-                aNotifier->OnItemValue( mInfo.Value );
+                aNotifier->OnItemValue( mInfo.Value, mInfo.Parent.back().ParentID );
                 mState = eParserState::ParseValueFinish;
                 return DoParseValueFinish( aChar, aNotifier );
             }
@@ -330,7 +359,7 @@ namespace jsbjson
                                     {
                                         lValue = aValue;
                                     }, lResult.value() );
-                        aNotifier->OnItemValue( lValue );
+                        aNotifier->OnItemValue( lValue, mInfo.Parent.back().ParentID );
                         mState = eParserState::ParseValueFinish;
                         return DoParseValueFinish( aChar, aNotifier );
                     }
@@ -351,9 +380,9 @@ namespace jsbjson
                 return false;
             }
 
-            const eParent lParent = mInfo.Parent.back();
+            const ParentData lParent = mInfo.Parent.back();
 
-            if ( lParent == eParent::Object ) {
+            if ( lParent.Parent == ParentData::eParent::Object ) {
                 if ( aChar == ',' ) {
                     aNotifier->OnNextItem();
                     mState = eParserState::InObjectBegin;
@@ -367,7 +396,8 @@ namespace jsbjson
 
                     mOpeningCurlyCount--;
                     mInfo.Parent.pop_back();
-                    aNotifier->OnObjectFinished();
+                    aNotifier->OnObjectFinished( mInfo.IDs.back() );
+                    mInfo.IDs.pop_back();
                     return true;
                 }
 
@@ -385,9 +415,10 @@ namespace jsbjson
                     return false;
                 }
 
-                aNotifier->OnArrayFinished();
+                aNotifier->OnArrayFinished( mInfo.IDs.back() );
                 mOpeningSquareCount--;
                 mInfo.Parent.pop_back();
+                mInfo.IDs.pop_back();
                 return true;
             }
 
@@ -397,7 +428,8 @@ namespace jsbjson
                 }
 
                 mOpeningCurlyCount--;
-                aNotifier->OnObjectFinished();
+                aNotifier->OnObjectFinished( mInfo.IDs.back() );
+                mInfo.IDs.pop_back();
                 return true;
             }
 

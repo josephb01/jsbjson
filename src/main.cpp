@@ -85,6 +85,7 @@ int main()
 
     jsbjson::JsonParser lMyParser;
     bool                lSuccess = lMyParser.Parse( lComplexJson, std::make_shared<jsbjson::TestParserNotifier>() );
+    // bool lSuccess = lMyParser.Parse( "{\"description\":\"Simple test object\",\"person\":{\"name\":\"John\",\"location\":\"USA\"}}", std::make_shared<jsbjson::TestParserNotifier>() );
 
     std::optional<complex> lParsedComplex = jsbjson::FromJson<complex> {}( lComplexJson );
 

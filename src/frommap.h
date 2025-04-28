@@ -13,8 +13,6 @@
 
 namespace jsbjson
 {
-    using JsonElement = std::unordered_map<std::string, std::any>;
-
     class FromMap
     {
     private:
@@ -29,6 +27,7 @@ namespace jsbjson
     private:
         static constexpr const size_t kMaxArrayDepth = 2;                                                                                  // Arrays only can be maximum 3 dimensional (std::vector<std::vector<std::vector<int32_t>>>)
 
+    private:
         std::string ToValue( const std::any& aValue )
         {
             if ( aValue.type() == typeid( std::string ) ) {

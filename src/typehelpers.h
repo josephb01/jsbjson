@@ -2,9 +2,13 @@
 
 #include <vector>
 #include <list>
+#include <unordered_map>
+#include <cstdint>
 
 namespace jsbjson
 {
+    using JsonElement = std::unordered_map<std::string, std::any>;
+
     template<typename>
     struct IsArray : std::false_type {};
 

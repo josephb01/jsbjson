@@ -12,29 +12,29 @@ namespace jsbjson
     class TestParserNotifier : public IParserNotifier
     {
     public:
-        enum eValueType
+        void OnParsingStarted()
         {
-            String
-            , Bool
-            , Number
-            , Array
-            , Object
-            , Unknown
-        };
-
-    public:
-        void OnObjectBegin()
-        {
-            std::cout << "{";
         }
 
-        void OnObjectFinished()
+        void OnParsingFinished()
         {
+        }
+
+        void OnObjectBegin( const size_t aID,
+                            const size_t aParentID )
+        {
+            std::cout << "#ObjectBegin, ID:" << aID << "; ParentID:" << aParentID << "#\r\n" << "{";
+        }
+
+        void OnObjectFinished( const size_t aID )
+        {
+            std::cout << "#ObjectFinished, ID" << aID << "#";
             std::cout << "}";
         }
 
-        void OnItemBegin()
+        void OnItemBegin( const size_t aParentID )
         {
+            std::cout << "#OnItemBegin, ParentID" << aParentID << "#";
         };
 
         void OnItemName( const std::string& aName )
@@ -46,8 +46,10 @@ namespace jsbjson
         {
         }
 
-        void OnItemValue( const std::variant<uint64_t, int64_t, double, bool, std::string> aValue )
+        void OnItemValue( const std::variant<uint64_t, int64_t, double, bool, std::string> aValue,
+                          const size_t                                                     aParentID )
         {
+            std::cout << "#OnItemValue, ParentID" << aParentID << "#";
             std::visit( [] (const auto& aItem)
                         {
                             if constexpr ( std::is_same_v<std::decay_t<decltype( aItem )>, std::string>) {
@@ -59,9 +61,10 @@ namespace jsbjson
                         }, aValue );
         }
 
-        virtual void OnArrayBegin()
+        virtual void OnArrayBegin( const size_t aID,
+                                   const size_t aParentID )
         {
-            std::cout << "[";
+            std::cout << "#OnArrayBegin, ID:" << aID << "; ParentID:" << aParentID << "#\r\n" << "[";
         }
 
         virtual void OnNextItem()
@@ -69,8 +72,9 @@ namespace jsbjson
             std::cout << ",";
         }
 
-        virtual void OnArrayFinished()
+        virtual void OnArrayFinished( const size_t aID )
         {
+            std::cout << "#OnArrayFinished, ID" << aID << "#";
             std::cout << "]";
         }
 
