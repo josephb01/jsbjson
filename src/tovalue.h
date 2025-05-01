@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 namespace jsbjson
 {
     template<typename T>

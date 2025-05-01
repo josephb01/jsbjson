@@ -20,8 +20,9 @@ namespace jsbjson
         {
         }
 
-        void OnObjectBegin( const size_t aID,
-                            const size_t aParentID )
+        void OnObjectBegin( const size_t       aID,
+                            const size_t       aParentID,
+                            const std::string& aName )
         {
             std::cout << "#ObjectBegin, ID:" << aID << "; ParentID:" << aParentID << "#\r\n" << "{";
         }
@@ -37,7 +38,8 @@ namespace jsbjson
             std::cout << "#OnItemBegin, ParentID" << aParentID << "#";
         };
 
-        void OnItemName( const std::string& aName )
+        void OnItemName( const std::string& aName,
+                         const size_t       aParentID )
         {
             std::cout << std::quoted( aName ) << ":";
         }
@@ -47,9 +49,10 @@ namespace jsbjson
         }
 
         void OnItemValue( const std::variant<uint64_t, int64_t, double, bool, std::string> aValue,
-                          const size_t                                                     aParentID )
+                          const size_t                                                     aParentID,
+                          const std::string&                                               aName )
         {
-            std::cout << "#OnItemValue, ParentID" << aParentID << "#";
+            std::cout << "#OnItemValue, ParentID" << aParentID << "ItemName:" << aName << "#";
             std::visit( [] (const auto& aItem)
                         {
                             if constexpr ( std::is_same_v<std::decay_t<decltype( aItem )>, std::string>) {
@@ -61,10 +64,11 @@ namespace jsbjson
                         }, aValue );
         }
 
-        virtual void OnArrayBegin( const size_t aID,
-                                   const size_t aParentID )
+        virtual void OnArrayBegin( const size_t       aID,
+                                   const size_t       aParentID,
+                                   const std::string& aName )
         {
-            std::cout << "#OnArrayBegin, ID:" << aID << "; ParentID:" << aParentID << "#\r\n" << "[";
+            std::cout << "#OnArrayBegin, ID:" << aID << "; ParentID:" << aParentID << " ArrayName:" << aName << "#\r\n" << "[";
         }
 
         virtual void OnNextItem()

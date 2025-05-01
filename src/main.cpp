@@ -8,6 +8,7 @@
 #include "frommap.h"
 #include "parser.h"
 #include "testparsenofitier.h"
+#include "mapparsernotifier.h"
 
 JsonObjectBegin( justForFun )
     JsonAddMember( funny, std::string );
@@ -83,8 +84,10 @@ int main()
     const std::string& lComplexJson = lComplex.ToJson();
     std::cout << lComplexJson << std::endl;
 
-    jsbjson::JsonParser lMyParser;
-    bool                lSuccess = lMyParser.Parse( lComplexJson, std::make_shared<jsbjson::TestParserNotifier>() );
+    // bool                lSuccess = lMyParser.Parse( lComplexJson, std::make_shared<jsbjson::MapParserNotifier>() );
+    // bool lSuccess = lMyParser.Parse( "{\"array\":[\"alma\",\"korte\"]}", std::make_shared<jsbjson::MapParserNotifier>() );
+    // bool lSuccess = lMyParser.Parse( "{\"array\":[[\"alma\",\"korte\"], [1,2]]}", std::make_shared<jsbjson::MapParserNotifier>() );
+
     // bool lSuccess = lMyParser.Parse( "{\"description\":\"Simple test object\",\"person\":{\"name\":\"John\",\"location\":\"USA\"}}", std::make_shared<jsbjson::TestParserNotifier>() );
 
     std::optional<complex> lParsedComplex = jsbjson::FromJson<complex> {}( lComplexJson );
@@ -147,16 +150,26 @@ int main()
             { std::string { "obj" }, 23 }, { std::string { "test" }, true }
         }
     };
-    lMap[ "arrayOfArray" ] = std::vector<std::vector<int32_t>> {
+    lMap[ "arrayOfArray" ] = std::vector<std::vector<int64_t>> {
         { 1, 2, 3 }, { 4, 5, 6 }
     };
 
     lMap[ "arrayOfVariantArray" ] = std::vector<std::vector<std::any>> {
         { 1, 2, std::string { "harom" }
-        }, { 4, std::string { "ot" }, 6, std::vector<int32_t> { 66, 77, 88 }
+        }, { 4, std::string { "ot" }, 6, std::vector<int64_t> { 66, 77, 88 }
         }
     };
 
     // lRootMap[ "root" ] = lMap;
-    std::cout << lFromMap( lMap );
+    std::cout << lFromMap( lMap ) << std::endl;
+    std::cout << "-------------------------------" << std::endl;
+    jsbjson::JsonParser  lMyParser;
+    jsbjson::JsonElement lResult;
+
+    /* if ( lMyParser.Parse( "{\"array\":[[6,7,{\"sajt\":{\"array\":[5,6,7]}}], [1,2]]}", std::make_shared<jsbjson::MapParserNotifier>( lResult ) ) ) {
+         std::cout << jsbjson::FromMap {}( lResult ) << std::endl;
+       }*/
+    if ( lMyParser.Parse( lFromMap( lMap ), std::make_shared<jsbjson::MapParserNotifier>( lResult ) ) ) {
+        std::cout << jsbjson::FromMap {}( lResult ) << std::endl;
+    }
 }

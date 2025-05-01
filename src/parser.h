@@ -141,7 +141,7 @@ namespace jsbjson
             if ( aChar == '{' ) {
                 const size_t lID = GetNextID();
                 mInfo.IDs.push_back( lID );
-                aNotifier->OnObjectBegin( lID, 0 );
+                aNotifier->OnObjectBegin( lID, 0, "" );
                 mInfo.Parent.push_back( { ParentData::eParent::Object, lID } );
 
                 mOpeningCurlyCount++;
@@ -166,13 +166,13 @@ namespace jsbjson
             }
 
             mInfo.Value              = {};
+            mInfo.Name               = {};
             const ParentData lParent = mInfo.Parent.back();
 
             if ( lParent.Parent == ParentData::eParent::Object ) {
                 if ( aChar == '\"' ) {
                     aNotifier->OnItemBegin( lParent.ParentID );
-                    mInfo.Name = {};
-                    mState     = eParserState::InItemName;
+                    mState = eParserState::InItemName;
                     return true;
                 }
 
@@ -189,7 +189,7 @@ namespace jsbjson
                            const std::shared_ptr<IParserNotifier>& aNotifier )
         {
             if ( aChar == '\"' ) {
-                aNotifier->OnItemName( mInfo.Name );
+                aNotifier->OnItemName( mInfo.Name, mInfo.Parent.back().ParentID );
                 mState = eParserState::InItemValueDelimiter;
                 return true;
             }
@@ -223,7 +223,8 @@ namespace jsbjson
 
             if ( aChar == '[' ) {
                 const size_t lID = GetNextID();
-                aNotifier->OnArrayBegin( lID, mInfo.Parent.back().ParentID );
+                aNotifier->OnArrayBegin( lID, mInfo.Parent.back().ParentID, mInfo.Name );
+                mInfo.Name = {};
                 mInfo.Parent.push_back( { ParentData::eParent::Array, lID } );
                 mInfo.IDs.push_back( lID );
                 mOpeningSquareCount++;
@@ -233,7 +234,7 @@ namespace jsbjson
 
             if ( aChar == '{' ) {
                 const size_t lID = GetNextID();
-                aNotifier->OnObjectBegin( lID, mInfo.Parent.back().ParentID );
+                aNotifier->OnObjectBegin( lID, mInfo.Parent.back().ParentID, mInfo.Name );
                 mInfo.Parent.push_back( { ParentData::eParent::Object, lID } );
                 mInfo.IDs.push_back( lID );
                 mOpeningCurlyCount++;
@@ -274,11 +275,17 @@ namespace jsbjson
             return false;
         }
 
+        void NotifyItemValue( const std::shared_ptr<IParserNotifier>&                           aNotifier,
+                              const std::variant<uint64_t, int64_t, double, bool, std::string>& aValue )
+        {
+            aNotifier->OnItemValue( aValue, mInfo.Parent.back().ParentID, mInfo.Name );
+        }
+
         bool DoParseStringValue( const char                              aChar,
                                  const std::shared_ptr<IParserNotifier>& aNotifier )
         {
             if ( aChar == '\"' ) {
-                aNotifier->OnItemValue( mInfo.Value, mInfo.Parent.back().ParentID );
+                NotifyItemValue( aNotifier, mInfo.Value );
                 mState = eParserState::ParseValueFinish;
                 return true;
             }
@@ -293,13 +300,17 @@ namespace jsbjson
             if ( ( mInfo.Value == "true" )
                  || ( mInfo.Value == "false" ) )
             {
-                aNotifier->OnItemValue( mInfo.Value, mInfo.Parent.back().ParentID );
+                const bool lValue = mInfo.Value == "true"
+                                    ? true
+                                    : false;
+                NotifyItemValue( aNotifier, lValue );
                 mState = eParserState::ParseValueFinish;
                 return DoParseValueFinish( aChar, aNotifier );
             }
-            else {
-                aNotifier->OnError( "Value must be true or false, instead it was:" + mInfo.Value );
-            }
+
+            /*  else {
+                  aNotifier->OnError( "Value must be true or false, instead it was:" + mInfo.Value );
+               }*/
 
             mInfo.Value += aChar;
             return true;
@@ -359,7 +370,7 @@ namespace jsbjson
                                     {
                                         lValue = aValue;
                                     }, lResult.value() );
-                        aNotifier->OnItemValue( lValue, mInfo.Parent.back().ParentID );
+                        NotifyItemValue( aNotifier, lValue );
                         mState = eParserState::ParseValueFinish;
                         return DoParseValueFinish( aChar, aNotifier );
                     }

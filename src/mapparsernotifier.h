@@ -7,6 +7,8 @@
 #include <iomanip>
 #include <type_traits>
 #include <list>
+#include <map>
+#include <any>
 #include "iparsernotifier.h"
 #include "typehelpers.h"
 
@@ -15,69 +17,222 @@ namespace jsbjson
     class MapParserNotifier : public IParserNotifier
     {
     public:
+        MapParserNotifier( JsonElement& aResult )
+            : mRoot( aResult )
+        {}
+
+    public:
         void OnParsingStarted()
         {
+            mObjects.clear();
+            mArrayNames.clear();
+            mObjectNames.clear();
+            mParents.clear();
+        }
+
+        template<size_t DEPTH, typename HEAD, typename...TAIL>
+        std::optional<VectorVariant> ToVector( const std::vector<std::any>& aAnyVector )
+        {
+            if constexpr ( sizeof...( TAIL ) == 0 ) {
+                std::optional<std::vector<typename AnyVectorDepth<HEAD, DEPTH>::type>> lVector = ConvertToVector<typename AnyVectorDepth<HEAD, DEPTH>::type>( aAnyVector );
+
+                if ( lVector.has_value() ) {
+                    return lVector.value();
+                }
+
+                return std::nullopt;
+            }
+            else {
+                std::optional<std::vector<typename AnyVectorDepth<HEAD, DEPTH>::type>> lVector = ConvertToVector<typename AnyVectorDepth<HEAD, DEPTH>::type>( aAnyVector );
+
+                if ( lVector.has_value() ) {
+                    return lVector.value();
+                }
+
+                return ToVector<DEPTH, TAIL...>( aAnyVector );
+            }
+        }
+
+        std::optional<VectorVariant> GetAsRegularVector( const std::vector<std::any>& aVector )
+        {
+            const auto& lIsVector = AnyArrayIsVector<2>( aVector );
+
+            if ( !std::get<0>( lIsVector ) ) {
+                return std::nullopt;
+            }
+
+            const size_t                 lDepth = std::get<1>( lIsVector );
+            std::optional<VectorVariant> lVectorOpt;
+
+            if ( lDepth == 0 ) {
+                lVectorOpt = ToVectorOuter<0>( aVector );
+            }
+
+            if ( lDepth == 1 ) {
+                lVectorOpt = ToVectorOuter<1>( aVector );
+            }
+
+            if ( lDepth == 2 ) {
+                lVectorOpt = ToVectorOuter<2>( aVector );
+            }
+
+            return lVectorOpt;
+        }
+
+        template<size_t DEPTH>
+        std::optional<VectorVariant> ToVectorOuter( const std::vector<std::any>& aVector )
+        {
+            return ToVector<DEPTH, int64_t, uint64_t, std::string, bool, double, JsonElement>( aVector );
         }
 
         void OnParsingFinished()
         {
+            if ( mObjects.size() != 1 ) {
+                return;
+            }
+
+            mRoot = mObjects.begin()->second;
         }
 
-        void OnObjectBegin()
+        void OnObjectBegin( const size_t       aID,
+                            const size_t       aParentID,
+                            const std::string& aName )
+        {
+            if ( mObjects.find( aParentID ) != mObjects.cend() ) {
+                mObjectNames[ aID ] = aName;
+            }
+
+            mParents[ aID ] = aParentID;
+            mObjects[ aID ] = JsonElement {};
+        }
+
+        void OnObjectFinished( const size_t aID )
+        {
+            const ID_t  lParent      = mParents[ aID ];
+            const auto& lParentArray = mArrays.find( lParent );
+
+            if ( lParentArray != mArrays.cend() ) {
+                lParentArray->second.push_back( mObjects[ aID ] );
+                mObjects.erase( aID );
+                return;
+            }
+
+            const std::string& lObjectName   = mObjectNames[ aID ];
+            const auto&        lParentObject = mObjects.find( lParent );
+
+            if ( lParentObject != mObjects.cend() ) {
+                lParentObject->second[ lObjectName ] = mObjects[ aID ];
+                mObjects.erase( aID );
+            }
+        }
+
+        void OnItemBegin( const size_t aParentID )
         {
         }
 
-        void OnObjectFinished()
+        void OnItemName( const std::string& aName,
+                         const size_t       aParentID )
         {
-        }
-
-        void OnItemBegin()
-        {
-        };
-
-        void OnItemName( const std::string& aName )
-        {
-            mItemName = aName;
         }
 
         void OnItemValueBegin( const IParserNotifier::eValueType aType )
         {
         }
 
-        void OnItemValue( const std::variant<uint64_t, int64_t, double, bool, std::string> aValue )
+        void OnItemValue( const std::variant<uint64_t, int64_t, double, bool, std::string> aValue,
+                          const size_t                                                     aParentID,
+                          const std::string&                                               aName )
         {
-            std::visit( [ & ] (const auto& aItem)
-                        {
-                            if ( mInObject ) {}
+            if ( mObjects.find( aParentID ) != mObjects.cend() ) {
+                std::visit( [ &, this ] (const auto& aItem)
+                            {
+                                mObjects[ aParentID ][ aName ] = aItem;
+                            }, aValue );
+            }
 
-                            if constexpr ( std::is_same_v<std::decay_t<decltype( aItem )>, std::string>) {}
-                            else {}
-                        }, aValue );
+            if ( mArrays.find( aParentID ) != mArrays.end() ) {
+                std::visit( [ &, this ] (const auto& aItem)
+                            {
+                                mArrays[ aParentID ].push_back( aItem );
+                            }, aValue );
+            }
         }
 
-        void OnArrayBegin()
+        virtual void OnArrayBegin( const size_t       aID,
+                                   const size_t       aParentID,
+                                   const std::string& aName )
+        {
+            mArrays[ aID ] = std::vector<std::any> {};
+
+            if ( !aName.empty() ) {
+                mArrayNames[ aID ] = aName;
+            }
+
+            mParents[ aID ] = aParentID;
+        }
+
+        virtual void OnNextItem()
         {
         }
 
-        void OnNextItem()
+        virtual void OnArrayFinished( const size_t aID )
         {
+            const ID_t  lParent       = mParents[ aID ];
+            const auto& lParentObject = mObjects.find( lParent );
+
+            const auto&                  lArrayItem = mArrays[ aID ];
+            std::optional<VectorVariant> lVectorOpt = GetAsRegularVector( lArrayItem );
+
+            if ( lParentObject != mObjects.cend() ) {
+                const std::string& lArrayName = mArrayNames[ aID ];
+
+                if ( lVectorOpt.has_value() ) {
+                    std::visit( [ &, this ] (const auto& aVector)
+                                {
+                                    lParentObject->second[ lArrayName ] = aVector;
+                                }, lVectorOpt.value() );
+                }
+                else {
+                    lParentObject->second[ lArrayName ] = lArrayItem;
+                }
+
+                mArrays.erase( aID );
+                return;
+            }
+
+            const auto& lParentArray = mArrays.find( lParent );
+
+            if ( lParentArray == mArrays.cend() ) {
+                // Should not happen
+                return;
+            }
+
+            if ( lVectorOpt.has_value() ) {
+                std::visit( [ &, this ] (const auto& aVector)
+                            {
+                                lParentArray->second.push_back( aVector );
+                            }, lVectorOpt.value() );
+            }
+            else {
+                lParentArray->second.push_back( lArrayItem );
+            }
+
+            mArrays.erase( aID );
         }
 
-        void OnArrayFinished()
+        virtual void OnError( const std::string& aErrorMessage )
         {
-        }
-
-        void OnError( const std::string& aErrorMessage )
-        {
-            std::cout << aErrorMessage << std::endl;
+            std::cout << "ERRORR!!!" << aErrorMessage << std::endl;
         };
 
     private:
-        bool         mInObject = true;
-        bool         mInArray  = false;
-        std::string  mItemName;
-        JsonElement  mRoot;
-        JsonElement* mActualElement = &mRoot;
+        JsonElement& mRoot;
+        using ID_t = size_t;
+        std::map<ID_t, JsonElement>           mObjects;
+        std::map<ID_t, std::vector<std::any>> mArrays;
+        std::map<ID_t, ID_t>                  mParents;                                                                                    /*!<first: the child id, second: the parent id*/
+        std::map<ID_t, std::string>           mArrayNames;
+        std::map<ID_t, std::string>           mObjectNames;
 
     private:
     };
