@@ -5,10 +5,10 @@
 #include "jsonobject.h"
 #include "jsongenerator.h"
 #include "jsondocument.h"
-#include "frommap.h"
 #include "parser.h"
 #include "testparsenofitier.h"
 #include "mapparsernotifier.h"
+#include "frommap.h"
 
 JsonObjectBegin( justForFun )
     JsonAddMember( funny, std::string );
@@ -143,33 +143,48 @@ int main()
         { std::string( "bicigli" ), 333 }
     };
     lMap[ "price" ]        = 534;
-    lMap[ "array" ]        = std::vector<std::string> { "egy", "ketto" };
-    lMap[ "variantArray" ] = std::vector<std::any> { std::string( "harom" ), 666 };
-    lMap[ "objectArray" ]  = std::vector<jsbjson::JsonElement> {
+    lMap[ "array" ]        = std::vector<jsbjson::JsonVariant> { std::string( "egy" ), std::string( "ketto" ) };
+    lMap[ "variantArray" ] = std::vector<jsbjson::JsonVariant> { std::string( "harom" ), 666 };
+    lMap[ "objectArray" ]  = std::vector<jsbjson::JsonVariant> {
         {
-            { std::string { "obj" }, 23 }, { std::string { "test" }, true }
-        }
-    };
-    lMap[ "arrayOfArray" ] = std::vector<std::vector<int64_t>> {
-        { 1, 2, 3 }, { 4, 5, 6 }
-    };
-
-    lMap[ "arrayOfVariantArray" ] = std::vector<std::vector<std::any>> {
-        { 1, 2, std::string { "harom" }
-        }, { 4, std::string { "ot" }, 6, std::vector<int64_t> { 66, 77, 88 }
+            jsbjson::JsonElement {
+                { std::string { "obj" }, 23 }, { std::string { "test" }, true }
+            }
         }
     };
 
-    // lRootMap[ "root" ] = lMap;
+    lMap[ "arrayOfArray" ] = std::vector<jsbjson::JsonVariant> { std::vector<jsbjson::JsonVariant> { 1, 2, 3 }, std::vector<jsbjson::JsonVariant> { 4, 5, 6 }
+    };
+
+    lMap[ "arrayOfVariantArray" ] = std::vector<jsbjson::JsonVariant> {
+        std::vector<jsbjson::JsonVariant> { 1, 2, std::string { "harom" }
+        }, std::vector<jsbjson::JsonVariant> { 4, std::string { "ot" }, 6, std::vector<jsbjson::JsonVariant> { 66, 77, 88 }
+        }
+    };
+
+    std::cout << "--------------------" << std::endl;
     std::cout << lFromMap( lMap ) << std::endl;
     std::cout << "-------------------------------" << std::endl;
     jsbjson::JsonParser  lMyParser;
     jsbjson::JsonElement lResult;
 
-    /* if ( lMyParser.Parse( "{\"array\":[[6,7,{\"sajt\":{\"array\":[5,6,7]}}], [1,2]]}", std::make_shared<jsbjson::MapParserNotifier>( lResult ) ) ) {
-         std::cout << jsbjson::FromMap {}( lResult ) << std::endl;
-       }*/
+/* if ( lMyParser.Parse( "{\"array\":[[6,7,{\"sajt\":{\"array\":[5,6,7]}}], [1,2]]}", std::make_shared<jsbjson::MapParserNotifier>( lResult ) ) ) {
+     std::cout << jsbjson::FromMap {}( lResult ) << std::endl;
+   }*/
     if ( lMyParser.Parse( lFromMap( lMap ), std::make_shared<jsbjson::MapParserNotifier>( lResult ) ) ) {
+        if ( auto lValue = lResult[ "price" ].GetValue<uint64_t>(); lValue.has_value() ) {
+            std::cout << "WORKS!!!" << std::endl;
+        }
+
         std::cout << jsbjson::FromMap {}( lResult ) << std::endl;
     }
+
+    jsbjson::JsonElement lElement;
+    jsbjson::JsonElement lItem;
+    lItem[ "kutya" ]    = 444;
+    lElement[ "alma" ]  = 454;
+    lElement[ "array" ] = std::vector<jsbjson::JsonVariant> { 1, 2, 3, lItem };
+
+    std::cout << "*********************\r\n" << jsbjson::FromMap {}( lElement ) << std::endl;
+// jsbjson::JsonVariantRecursive x;
 }

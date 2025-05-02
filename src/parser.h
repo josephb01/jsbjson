@@ -221,6 +221,8 @@ namespace jsbjson
                 return true;
             }
 
+            mInfo.Value = {};
+
             if ( aChar == '[' ) {
                 const size_t lID = GetNextID();
                 aNotifier->OnArrayBegin( lID, mInfo.Parent.back().ParentID, mInfo.Name );
@@ -307,10 +309,6 @@ namespace jsbjson
                 mState = eParserState::ParseValueFinish;
                 return DoParseValueFinish( aChar, aNotifier );
             }
-
-            /*  else {
-                  aNotifier->OnError( "Value must be true or false, instead it was:" + mInfo.Value );
-               }*/
 
             mInfo.Value += aChar;
             return true;
