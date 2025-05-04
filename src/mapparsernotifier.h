@@ -11,10 +11,11 @@
 #include <any>
 #include "iparsernotifier.h"
 #include "typehelpers.h"
+#include "jsonelement.h"
 
 namespace jsbjson
 {
-    class MapParserNotifier : public IParserNotifier
+    class MapParserNotifier final : public IParserNotifier
     {
     public:
         MapParserNotifier( JsonElement& aResult )
@@ -25,9 +26,10 @@ namespace jsbjson
         void OnParsingStarted()
         {
             mObjects.clear();
+            mArrays.clear();
+            mParents.clear();
             mArrayNames.clear();
             mObjectNames.clear();
-            mParents.clear();
         }
 
         void OnParsingFinished()
@@ -37,6 +39,11 @@ namespace jsbjson
             }
 
             mRoot = mObjects.begin()->second;
+            mObjects.clear();
+            mArrays.clear();
+            mParents.clear();
+            mArrayNames.clear();
+            mObjectNames.clear();
         }
 
         void OnObjectBegin( const size_t       aID,
@@ -150,7 +157,6 @@ namespace jsbjson
 
         virtual void OnError( const std::string& aErrorMessage )
         {
-            std::cout << "ERRORR!!!" << aErrorMessage << std::endl;
         };
 
     private:
