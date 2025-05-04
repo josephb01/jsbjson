@@ -9,6 +9,7 @@
 #include <list>
 #include "tovalue.h"
 #include "typehelpers.h"
+#include "jsonelement.h"
 
 namespace jsbjson
 {

@@ -33,10 +33,10 @@ namespace jsbjson
                                   const std::string&                                               aName ) = 0;
         virtual void OnArrayBegin( const size_t       aID,
                                    const size_t       aParentID,
-                                   const std::string& aName )    = 0;
-        virtual void OnNextItem()                                = 0;
-        virtual void OnArrayFinished( const size_t aID )         = 0;
-        virtual void OnParsingFinished()                         = 0;
-        virtual void OnError( const std::string& aErrorMessage ) = 0;
+                                   const std::string& aName ) = 0;
+        virtual void OnNextItem()                             = 0;
+        virtual void OnArrayFinished( const size_t aID )      = 0;
+        virtual void OnParsingFinished()                      = 0;
+        virtual void OnError( const std::string& aError )     = 0;
     };
 }

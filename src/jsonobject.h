@@ -3,7 +3,7 @@
 #include "bindings.h"
 
 #define STRING( a ) STR( a )
-#define STR( a )    #a
+#define STR( a )    std::string(#a )
 
 #define CONCAT( a, b )       CONCAT_INNER( a, b )
 #define CONCAT_INNER( a, b ) a ## b
@@ -25,7 +25,7 @@
             { \
                 if ( this != &aOther ) { \
                     Value = aOther.Value; \
-                    IsSet = true; \
+                    IsSet = aOther.IsSet; \
                 } \
             } \
             aStructName() = default; \
@@ -38,6 +38,14 @@
                 IsSet = true; \
                 Value = aValue; \
                 return Value; \
+            } \
+            const bool operator ==( const T& aValue ) \
+            { \
+                return Value == aValue; \
+            } \
+            const bool operator ==( const aStructName& aOther ) \
+            { \
+                return Value == aOther.Value; \
             } \
         private: \
             static constexpr bool IsAJsonMember() { return true; } \

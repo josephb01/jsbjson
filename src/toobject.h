@@ -11,9 +11,6 @@ namespace jsbjson
     class ToObject final
     {
     private:
-        OBJECT mObject;
-
-    private:
         template<typename MEMBERTYPE>
         MEMBERTYPE ExtractArray( const std::vector<JsonVariant>& aSourceArray )
         {
@@ -114,7 +111,7 @@ namespace jsbjson
 
                     if ( lArray.has_value() ) {
                         MemberT lResult = ExtractArray<MemberT>( lArray.value() );
-                        aMember.Value   = lResult;
+                        aMember         = lResult;
                     }
                 }
                 else {
@@ -127,10 +124,7 @@ namespace jsbjson
                     const std::optional<MemberT> lValue = lItemIt->second.GetValue<MemberT>();
 
                     if ( lValue.has_value() ) {
-                        aMember.Value = lValue.value();
-                    }
-                    else {
-                        int x = 3;
+                        aMember = lValue.value();
                     }
                 }
             }
@@ -150,13 +144,15 @@ namespace jsbjson
                 return std::nullopt;
             }
 
-            auto lValuesAsTuple = mObject.ConvertRef();
+            OBJECT lObject;
+
+            auto lValuesAsTuple = lObject.ConvertRef();
             std::apply( [ & ] (auto&... aArgs)
                         {
                             ( Process<decltype( aArgs )>( std::forward<decltype( aArgs )>( aArgs ), lResult ), ... );
                         }, lValuesAsTuple );
 
-            return mObject;
+            return lObject;
         }
     };
 }

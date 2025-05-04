@@ -45,7 +45,7 @@ namespace jsbjson
                       const bool   aIsRoot = false ) const
         {
             if constexpr ( IsObject<std::decay_t<ITEM>>::value ) {
-                std::apply( [ & ] ( auto... aMembers )
+                std::apply( [ & ] ( const auto&... aMembers )
                             {
                                 if ( !aIsRoot ) {
                                     aJsonElement[ aObject.Name() ] = JsonElement {};
@@ -59,13 +59,15 @@ namespace jsbjson
             }
 
             if constexpr ( IsMember<std::decay_t<ITEM>>::value ) {
-                if constexpr ( IsArray<std::decay_t<typename ITEM::Type>>::value ) {
-                    aJsonElement[ aObject.Name() ]     = std::vector<JsonVariant> {};
-                    std::vector<JsonVariant>& lElement = aJsonElement[ aObject.Name() ].GetValueRef<std::vector<JsonVariant>>();
-                    ProcessArray( aObject.Value, lElement );
-                }
-                else {
-                    aJsonElement[ aObject.Name() ] = aObject.Value;
+                if ( aObject.IsSet ) {
+                    if constexpr ( IsArray<std::decay_t<typename ITEM::Type>>::value ) {
+                        aJsonElement[ aObject.Name() ]     = std::vector<JsonVariant> {};
+                        std::vector<JsonVariant>& lElement = aJsonElement[ aObject.Name() ].GetValueRef<std::vector<JsonVariant>>();
+                        ProcessArray( aObject.Value, lElement );
+                    }
+                    else {
+                        aJsonElement[ aObject.Name() ] = aObject.Value;
+                    }
                 }
             }
         }
