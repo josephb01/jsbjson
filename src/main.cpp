@@ -2,13 +2,14 @@
 #include <typeinfo>
 #include <iostream>
 #include <memory>
+#include <optional>
+#include <variant>
 #include "jsonobject.h"
-#include "jsongenerator.h"
-#include "jsondocument.h"
-#include "frommap.h"
 #include "parser.h"
-#include "testparsenofitier.h"
 #include "mapparsernotifier.h"
+#include "frommap.h"
+#include "toobject.h"
+#include "fromobject.h"
 
 JsonObjectBegin( justForFun )
     JsonAddMember( funny, std::string );
@@ -29,7 +30,7 @@ JsonObjectBegin( fruit );
     JsonAddMember( type, std::string );
 JsonObjectEnd( 1 );
 
-JsonObjectBeginRoot( complex );
+JsonObjectBegin( complex );
     JsonAddMember( description, std::string );
     JsonAddObjectMember( fruit );
     JsonAddObjectMember( price );
@@ -44,25 +45,51 @@ JsonObjectBegin( person );
     JsonAddMember( location, std::string );
 JsonObjectEnd( 2 );
 
-JsonObjectBeginRoot( simple );
+JsonObjectBegin( simple );
     JsonAddMember( description, std::string );
     JsonAddObjectMember( person );
 JsonObjectEnd( 2 );
 
-JsonObjectBeginRoot( boolean );
+JsonObjectBegin( boolean );
     JsonAddMember( boolVal1, bool );
     JsonAddMember( boolVal2, bool );
 JsonObjectEnd( 2 );
 
-JsonObjectBeginRoot( number )
+JsonObjectBegin( number )
     JsonAddMember( number1, double );
     JsonAddMember( number2, int64_t );
     JsonAddMember( number3, int64_t );
 JsonObjectEnd( 3 );
 
-JsonObjectBeginRoot( array )
+JsonObjectBegin( array )
     JsonAddMember( values, std::vector<std::string> );
 JsonObjectEnd( 1 );
+
+template<typename OBJECT>
+bool IsValid( const OBJECT& aObject )
+{
+    const std::string lJson = aObject.ToJson();
+    std::cout << "From object to json string:" << std::endl;
+    std::cout << lJson << std::endl;
+    std::cout << "----------------------------" << std::endl;
+    std::optional<OBJECT> lObject = jsbjson::ToObject<OBJECT> {}( lJson );
+
+    if ( !lObject.has_value() ) {
+        std::cout << "Failed to parse!!" << std::endl;
+        return false;
+    }
+
+    const std::string lJsonFromParsed = lObject.value().ToJson();
+
+    if ( lJsonFromParsed == lJson ) {
+        return true;
+    }
+
+    std::cout << "Parsed not the same, parsed:" << std::endl;
+    std::cout << lJsonFromParsed << std::endl;
+    std::cout << "!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
+    return false;
+}
 
 int main()
 {
@@ -81,95 +108,67 @@ int main()
         { std::string( "Peterke" ), std::string( "USA" ) }
     };
 
-    const std::string& lComplexJson = lComplex.ToJson();
-    std::cout << lComplexJson << std::endl;
-
-    // bool                lSuccess = lMyParser.Parse( lComplexJson, std::make_shared<jsbjson::MapParserNotifier>() );
-    // bool lSuccess = lMyParser.Parse( "{\"array\":[\"alma\",\"korte\"]}", std::make_shared<jsbjson::MapParserNotifier>() );
-    // bool lSuccess = lMyParser.Parse( "{\"array\":[[\"alma\",\"korte\"], [1,2]]}", std::make_shared<jsbjson::MapParserNotifier>() );
-
-    // bool lSuccess = lMyParser.Parse( "{\"description\":\"Simple test object\",\"person\":{\"name\":\"John\",\"location\":\"USA\"}}", std::make_shared<jsbjson::TestParserNotifier>() );
-
-    std::optional<complex> lParsedComplex = jsbjson::FromJson<complex> {}( lComplexJson );
-
-    std::optional<simple> lParsed = jsbjson::FromJson<simple> {}( "{\"description\":\"Simple test object\",\"person\":{\"name\":\"John\",\"location\":\"USA\"}}" );
-
-    if ( lParsed.has_value() ) {
-        std::cout << lParsed.value().ToJson() << std::endl;
+    if ( !IsValid( lComplex ) ) {
+        std::cout << "Complex not OK!" << std::endl;
     }
 
     boolean lBool;
     lBool.boolVal1 = true;
     lBool.boolVal2 = false;
 
-    const std::string& lBoolJson = lBool.ToJson();
-    std::cout << lBoolJson << std::endl;
-    std::optional<boolean> lBoolParsed = jsbjson::FromJson<boolean> {}( lBoolJson );
+    if ( !IsValid( lBool ) ) {
+        std::cout << "Boolean not OK!" << std::endl;
+    }
 
     number lNumber;
     lNumber.number1 = 55.5;
     lNumber.number2 = -111;
     lNumber.number3 = 555;
 
-    const std::string& lNumberJson = lNumber.ToJson();
-    std::cout << lNumberJson << std::endl;
-
-    std::optional<number> lParsedNumber = jsbjson::FromJson<number> {}( lNumberJson );
-
-    array lArray;
-    lArray.values                 = { std::string( "apple" ), std::string( "wall" ) };
-    const std::string& lArrayJson = lArray.ToJson();
-    std::cout << lArrayJson << std::endl;
-
-    std::optional<array> lParsedrray = jsbjson::FromJson<array> {}( lArrayJson );
-
-    jsbjson::JsonDocument lDocument;
-    lDocument.Parse( "{\"array\":[\"alma\",\"korte\"]}" );
-    lDocument.Parse( "{\"array\":[true,false]}" );
-    lDocument.Parse( "{\"array\":[{\"type\":\"fruit\", \"value\":\"3\"},\"korte\"]}" );
-
-    const jsbjson::JsonObject::ArrayType lObject = lDocument.Root.Get<jsbjson::JsonObject::ArrayType>( "array" );
-
-    std::vector<int32_t> l;
-
-    if ( jsbjson::IsArray<std::vector<std::vector<int32_t>>>::value ) {
-        int debug = 3;
+    if ( !IsValid( lNumber ) ) {
+        std::cout << "number not OK!" << std::endl;
     }
 
-    jsbjson::FromMap     lFromMap;
-    jsbjson::JsonElement lRootMap;
+    array lArray;
+    lArray.values = { std::string( "apple" ), std::string( "wall" ) };
+
+    if ( !IsValid( lArray ) ) {
+        std::cout << "Array not ok!" << std::endl;
+    }
+
+    jsbjson::FromMap lFromMap;
+
     jsbjson::JsonElement lMap;
     lMap[ "alma" ] = jsbjson::JsonElement {
         { std::string( "bicigli" ), 333 }
     };
     lMap[ "price" ]        = 534;
-    lMap[ "array" ]        = std::vector<std::string> { "egy", "ketto" };
-    lMap[ "variantArray" ] = std::vector<std::any> { std::string( "harom" ), 666 };
-    lMap[ "objectArray" ]  = std::vector<jsbjson::JsonElement> {
-        {
+    lMap[ "array" ]        = std::vector<jsbjson::JsonVariant> { std::string( "egy" ), std::string( "ketto" ) };
+    lMap[ "variantArray" ] = std::vector<jsbjson::JsonVariant> { std::string( "harom" ), 666 };
+    lMap[ "objectArray" ]  = std::vector<jsbjson::JsonVariant> {
+        jsbjson::JsonElement {
             { std::string { "obj" }, 23 }, { std::string { "test" }, true }
-        }
-    };
-    lMap[ "arrayOfArray" ] = std::vector<std::vector<int64_t>> {
-        { 1, 2, 3 }, { 4, 5, 6 }
+        }, std::vector<jsbjson::JsonVariant> { 1, 2, 3, 4, 5, 6, 7 }
     };
 
-    lMap[ "arrayOfVariantArray" ] = std::vector<std::vector<std::any>> {
-        { 1, 2, std::string { "harom" }
-        }, { 4, std::string { "ot" }, 6, std::vector<int64_t> { 66, 77, 88 }
+    lMap[ "arrayOfArray" ] = std::vector<jsbjson::JsonVariant> { std::vector<jsbjson::JsonVariant> { 1, 2, 3 }, std::vector<jsbjson::JsonVariant> { 4, 5, 6 }
+    };
+
+    lMap[ "arrayOfVariantArray" ] = std::vector<jsbjson::JsonVariant> {
+        std::vector<jsbjson::JsonVariant> { 1, 2, std::string { "harom" }
+        }, std::vector<jsbjson::JsonVariant> { 4, std::string { "ot" }, 6, std::vector<jsbjson::JsonVariant> { 66, 77, 88 }
         }
     };
 
-    // lRootMap[ "root" ] = lMap;
+    std::cout << "--------------------" << std::endl;
     std::cout << lFromMap( lMap ) << std::endl;
     std::cout << "-------------------------------" << std::endl;
     jsbjson::JsonParser  lMyParser;
     jsbjson::JsonElement lResult;
 
-    /* if ( lMyParser.Parse( "{\"array\":[[6,7,{\"sajt\":{\"array\":[5,6,7]}}], [1,2]]}", std::make_shared<jsbjson::MapParserNotifier>( lResult ) ) ) {
-         std::cout << jsbjson::FromMap {}( lResult ) << std::endl;
-       }*/
     if ( lMyParser.Parse( lFromMap( lMap ), std::make_shared<jsbjson::MapParserNotifier>( lResult ) ) ) {
-        std::cout << jsbjson::FromMap {}( lResult ) << std::endl;
+        if ( auto lValue = lResult[ "price" ].GetValue<uint64_t>(); lValue.has_value() ) {
+            std::cout << "WORKS!!!" << std::endl;
+        }
     }
 }

@@ -5,7 +5,13 @@
 namespace jsbjson
 {
     template<typename T>
-    struct ToSimpleValue {};
+    struct ToSimpleValue
+    {
+        std::string operator ()( const T& aVal )
+        {
+            return "null";
+        }
+    };
 
     template<>
     struct ToSimpleValue<int8_t>
@@ -102,7 +108,7 @@ namespace jsbjson
     template<>
     struct ToSimpleValue<std::string>
     {
-        std::string operator ()( const std::string aVal )
+        std::string operator ()( const std::string& aVal )
         {
             return "\"" + aVal + "\"";
         }

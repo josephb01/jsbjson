@@ -1,5 +1,4 @@
 #pragma once
-#include <string_view>
 #include <iostream>
 #include "bindings.h"
 
@@ -15,15 +14,21 @@
         template<typename T> \
         struct aStructName \
         { \
-            using Type                             = T; \
-            static constexpr std::string_view Name = STRING( aName ); \
-            T                                 Value; \
-            bool                              IsSet = false; \
+            using Type = T; \
+            std::string Name() const { return STRING( aName ); } \
+            T           Value; \
+            bool        IsSet = false; \
             aStructName( const T& aVal ) \
                 : Value( aVal ) \
-            {} \
-            aStructName( const aStructName& aOther ) = default; \
-            aStructName()                            = default; \
+            { IsSet = true; } \
+            aStructName( const aStructName& aOther ) \
+            { \
+                if ( this != &aOther ) { \
+                    Value = aOther.Value; \
+                    IsSet = true; \
+                } \
+            } \
+            aStructName() = default; \
             const T& operator ()() const \
             { \
                 return Value; \
@@ -42,15 +47,13 @@
 
 #define JsonObjectBegin( aName ) \
         struct aName { \
-            constexpr std::string_view Name() const { return STRING( aName ); } \
+            std::string Name() const { return STRING( aName ); } \
+            std::string ToJson() const { \
+                return jsbjson::FromObject {}( *this ); \
+            } \
         private: \
             static constexpr bool IsAJsonObject() { return true; } \
         public:
-#define JsonObjectBeginRoot( aName ) \
-        JsonObjectBegin( aName ) \
-            std::string ToJson() const { \
-                return jsbjson::ToJson<aName> {}( *this, true ); \
-            }
 #define JsonAddMember( aName, aType ) \
         CreateMember( aName, aType, UNIQUE_NAME( aName ) )
 #define JsonAddObjectMember( aType ) aType aType;

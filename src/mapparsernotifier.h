@@ -30,61 +30,6 @@ namespace jsbjson
             mParents.clear();
         }
 
-        template<size_t DEPTH, typename HEAD, typename...TAIL>
-        std::optional<VectorVariant> ToVector( const std::vector<std::any>& aAnyVector )
-        {
-            if constexpr ( sizeof...( TAIL ) == 0 ) {
-                std::optional<std::vector<typename AnyVectorDepth<HEAD, DEPTH>::type>> lVector = ConvertToVector<typename AnyVectorDepth<HEAD, DEPTH>::type>( aAnyVector );
-
-                if ( lVector.has_value() ) {
-                    return lVector.value();
-                }
-
-                return std::nullopt;
-            }
-            else {
-                std::optional<std::vector<typename AnyVectorDepth<HEAD, DEPTH>::type>> lVector = ConvertToVector<typename AnyVectorDepth<HEAD, DEPTH>::type>( aAnyVector );
-
-                if ( lVector.has_value() ) {
-                    return lVector.value();
-                }
-
-                return ToVector<DEPTH, TAIL...>( aAnyVector );
-            }
-        }
-
-        std::optional<VectorVariant> GetAsRegularVector( const std::vector<std::any>& aVector )
-        {
-            const auto& lIsVector = AnyArrayIsVector<2>( aVector );
-
-            if ( !std::get<0>( lIsVector ) ) {
-                return std::nullopt;
-            }
-
-            const size_t                 lDepth = std::get<1>( lIsVector );
-            std::optional<VectorVariant> lVectorOpt;
-
-            if ( lDepth == 0 ) {
-                lVectorOpt = ToVectorOuter<0>( aVector );
-            }
-
-            if ( lDepth == 1 ) {
-                lVectorOpt = ToVectorOuter<1>( aVector );
-            }
-
-            if ( lDepth == 2 ) {
-                lVectorOpt = ToVectorOuter<2>( aVector );
-            }
-
-            return lVectorOpt;
-        }
-
-        template<size_t DEPTH>
-        std::optional<VectorVariant> ToVectorOuter( const std::vector<std::any>& aVector )
-        {
-            return ToVector<DEPTH, int64_t, uint64_t, std::string, bool, double, JsonElement>( aVector );
-        }
-
         void OnParsingFinished()
         {
             if ( mObjects.size() != 1 ) {
@@ -162,7 +107,7 @@ namespace jsbjson
                                    const size_t       aParentID,
                                    const std::string& aName )
         {
-            mArrays[ aID ] = std::vector<std::any> {};
+            mArrays[ aID ] = std::vector<JsonVariant> {};
 
             if ( !aName.empty() ) {
                 mArrayNames[ aID ] = aName;
@@ -180,21 +125,12 @@ namespace jsbjson
             const ID_t  lParent       = mParents[ aID ];
             const auto& lParentObject = mObjects.find( lParent );
 
-            const auto&                  lArrayItem = mArrays[ aID ];
-            std::optional<VectorVariant> lVectorOpt = GetAsRegularVector( lArrayItem );
+            const auto& lArrayItem = mArrays[ aID ];
 
             if ( lParentObject != mObjects.cend() ) {
                 const std::string& lArrayName = mArrayNames[ aID ];
 
-                if ( lVectorOpt.has_value() ) {
-                    std::visit( [ &, this ] (const auto& aVector)
-                                {
-                                    lParentObject->second[ lArrayName ] = aVector;
-                                }, lVectorOpt.value() );
-                }
-                else {
-                    lParentObject->second[ lArrayName ] = lArrayItem;
-                }
+                lParentObject->second[ lArrayName ] = lArrayItem;
 
                 mArrays.erase( aID );
                 return;
@@ -207,15 +143,7 @@ namespace jsbjson
                 return;
             }
 
-            if ( lVectorOpt.has_value() ) {
-                std::visit( [ &, this ] (const auto& aVector)
-                            {
-                                lParentArray->second.push_back( aVector );
-                            }, lVectorOpt.value() );
-            }
-            else {
-                lParentArray->second.push_back( lArrayItem );
-            }
+            lParentArray->second.push_back( lArrayItem );
 
             mArrays.erase( aID );
         }
@@ -228,11 +156,11 @@ namespace jsbjson
     private:
         JsonElement& mRoot;
         using ID_t = size_t;
-        std::map<ID_t, JsonElement>           mObjects;
-        std::map<ID_t, std::vector<std::any>> mArrays;
-        std::map<ID_t, ID_t>                  mParents;                                                                                    /*!<first: the child id, second: the parent id*/
-        std::map<ID_t, std::string>           mArrayNames;
-        std::map<ID_t, std::string>           mObjectNames;
+        std::map<ID_t, JsonElement>              mObjects;
+        std::map<ID_t, std::vector<JsonVariant>> mArrays;
+        std::map<ID_t, ID_t>                     mParents;                                                                                 /*!<first: the child id, second: the parent id*/
+        std::map<ID_t, std::string>              mArrayNames;
+        std::map<ID_t, std::string>              mObjectNames;
 
     private:
     };
