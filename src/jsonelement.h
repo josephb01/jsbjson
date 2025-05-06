@@ -128,18 +128,7 @@ namespace jsbjson
         template<typename T>
         const T& GetValueRef() const
         {
-            static T kEmpty;
-
-            if ( !IsA<std::decay_t<T>>() ) {
-                return kEmpty;
-            }
-
-            if constexpr ( IsValidType<std::decay_t<T>>() ) {
-                return std::get<std::decay_t<T>>( Value );
-            }
-            else {
-                return kEmptyValue;
-            }
+            return const_cast<JsonVariant&>( *this ).GetValueRef<T>();
         }
 
         template<typename T>
@@ -159,7 +148,16 @@ namespace jsbjson
             }
         }
 
-    private:
-        inline static sEmptyValue kEmptyValue;
+        JsonVariant& operator []( const std::string& aKey )
+        {
+            if ( std::holds_alternative<JsonElement>( Value ) ) {
+                JsonVariant& lVariant = std::get<JsonElement>( Value )[ aKey ];
+                return lVariant;
+            }
+
+            Value                 = JsonElement {};
+            JsonVariant& lVariant = std::get<JsonElement>( Value )[ aKey ];
+            return lVariant;
+        }
     };
 }
