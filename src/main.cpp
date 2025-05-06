@@ -79,7 +79,17 @@ int main()
         std::cout << lParsedObject[ "data" ].GetValueRef<jsbjson::JsonElement>()[ "age" ].GetValueRef<uint64_t>();
     }
 
-    lParsedObject[ "data" ].GetValueRef<jsbjson::JsonElement>()[ "age" ] = 66;
+    lParsedObject[ "data" ][ "age" ]                         = 66;
+    lParsedObject[ "newObject" ][ "language" ]               = std::string { "English" };
+    lParsedObject[ "newObject" ][ "profession" ]             = std::string { "programmer" };
+    lParsedObject[ "newObject" ][ "details" ][ "country" ]   = std::string { "USA" };
+    lParsedObject[ "newObject" ][ "details" ][ "available" ] = true;
     std::cout << "Modified value:" << std::endl;
     std::cout << lParsedObject.ToJson() << std::endl;
+
+    jsbjson::JsonElementEx lNewParsedObject;
+    lNewParsedObject.FromJson( lParsedObject.ToJson() );
+
+    std::cout << "------" << std::endl;
+    std::cout << lNewParsedObject.ToJson() << std::endl;
 }
